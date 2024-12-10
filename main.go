@@ -7,7 +7,8 @@ import (
 )
 
 func main() {
-	db.Init()
+	db.InitMysql()
+	db.InitRedis()
 	router := gin.Default()
 	handlers.Execute(router)
 	if err := router.Run(":8080"); err != nil {

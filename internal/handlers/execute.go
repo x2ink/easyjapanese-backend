@@ -13,4 +13,6 @@ func Execute(router *gin.Engine) {
 	})
 	Userhandler := &UserHandler{}
 	Userhandler.RegisterRoutes(router)
+	Captchahandler := &CaptchaHandler{}
+	Captchahandler.CaptchaRoutes(router)
 }
