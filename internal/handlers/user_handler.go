@@ -3,10 +3,12 @@ package handlers
 import (
 	"context"
 	"easyjapanese/db"
+	"easyjapanese/internal/middleware"
 	"easyjapanese/internal/models"
 	"easyjapanese/utils"
 	"encoding/json"
 	"github.com/gin-gonic/gin"
+	"log"
 	"net/http"
 	"time"
 )
@@ -16,9 +18,37 @@ type UserHandler struct{}
 func (h *UserHandler) RegisterRoutes(router *gin.Engine) {
 	router.POST("/register", h.Register)
 	router.POST("/login/:type", h.Login)
+	router.GET("/token/reset/:userId", h.ResetToken)
 	router.POST("/test", h.Test)
-	//rg := router.Group("/user")
-	//rg.POST("/register")
+	rg := router.Group("/user").Use(middleware.User())
+	rg.GET("/info", h.GetUserInfo)
+}
+func (h *UserHandler) ResetToken(c *gin.Context) {
+	UserId := c.Param("userId")
+	token := c.GetHeader("Authorization")
+	_, err := utils.DecryptToken(token)
+	if err != nil {
+		if err.Error() == "token has invalid claims: token is expired" {
+			user := models.Users{}
+			db.DB.First(&user, UserId)
+			tokenData := utils.Token{
+				RoleId: user.RoleId,
+				UserId: user.ID,
+			}
+			token := utils.EncryptToken(tokenData)
+			c.JSON(http.StatusResetContent, gin.H{"msg": "Successful reset", "data": token})
+			return
+		}
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"msg": "Authentication failed",
+		})
+		return
+	}
+}
+func (h *UserHandler) GetUserInfo(c *gin.Context) {
+	UserId, _ := c.Get("UserId")
+	log.Println("用户ID", UserId)
+	c.JSON(http.StatusOK, gin.H{"msg": "Key set successfully"})
 }
 func (h *UserHandler) Test(c *gin.Context) {
 	ctx := context.Background()
@@ -46,7 +76,7 @@ func (h *UserHandler) Login(c *gin.Context) {
 		var count int64
 		db.DB.Model(&models.Users{}).Where("email=? AND password=?", Req.Email, password).Count(&count)
 		if count > 0 {
-			c.JSON(http.StatusOK, gin.H{"msg": "Successful login"})
+			LoginSuccess(Req.Email, c)
 		} else {
 			c.JSON(http.StatusBadRequest, gin.H{"msg": "Email or password is wrong", "code": 4002})
 		}
@@ -65,13 +95,22 @@ func (h *UserHandler) Login(c *gin.Context) {
 			return
 		}
 		if capt.Type == "login" && capt.Value == Req.Captcha {
-			c.JSON(http.StatusOK, gin.H{"msg": "Successful login"})
+			LoginSuccess(Req.Email, c)
 		} else {
 			c.JSON(http.StatusBadRequest, gin.H{"err": "Captcha validation error", "code": 4001})
 		}
 	}
 }
-
+func LoginSuccess(email string, c *gin.Context) {
+	user := models.Users{}
+	db.DB.Model(&models.Users{}).Where("email=?", email).First(&user)
+	tokenData := utils.Token{
+		RoleId: user.RoleId,
+		UserId: user.ID,
+	}
+	token := utils.EncryptToken(tokenData)
+	c.JSON(http.StatusOK, gin.H{"msg": "Successful login", "data": token})
+}
 func (h *UserHandler) Register(c *gin.Context) {
 	var Req struct {
 		Nickname string `json:"nickname" binding:"required,min=2,max=7"`
@@ -109,8 +148,14 @@ func (h *UserHandler) Register(c *gin.Context) {
 		}
 		user := models.Users{Nickname: Req.Nickname, Email: Req.Email, Password: password, Os: Req.Os, Device: Req.Device, Ip: ip}
 		db.DB.Create(&user)
+		tokenData := utils.Token{
+			RoleId: 1,
+			UserId: user.ID,
+		}
+		token := utils.EncryptToken(tokenData)
 		c.JSON(http.StatusOK, gin.H{
-			"msg": "Successfully registered",
+			"msg":  "Successfully registered",
+			"data": token,
 		})
 	} else {
 		c.JSON(http.StatusBadRequest, gin.H{"err": "Captcha validation error", "code": 4001})
