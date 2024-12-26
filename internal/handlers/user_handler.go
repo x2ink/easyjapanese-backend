@@ -74,7 +74,7 @@ func (h *UserHandler) Login(c *gin.Context) {
 		//	密码登录
 		password := utils.EncryptionPassword(Req.Password)
 		var count int64
-		db.DB.Model(&models.Users{}).Where("email=? AND password=?", Req.Email, password).Count(&count)
+		db.DB.Find(&models.Users{}, "email=? AND password=?", Req.Email, password).Count(&count)
 		if count > 0 {
 			LoginSuccess(Req.Email, c)
 		} else {
@@ -141,7 +141,7 @@ func (h *UserHandler) Register(c *gin.Context) {
 	}
 	if capt.Type == "register" && capt.Value == Req.Captcha {
 		var count int64
-		db.DB.Model(&models.Users{}).Where("email=?", Req.Email).Count(&count)
+		db.DB.Find(&models.Users{}, "email=?", Req.Email).Count(&count)
 		if count > 0 {
 			c.JSON(http.StatusBadRequest, gin.H{"err": "email already exists", "code": 4002})
 			return

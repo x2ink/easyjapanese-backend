@@ -14,5 +14,5 @@ type Users struct {
 	Os       string
 	Device   string
 	Ip       string
-	RoleId   uint
+	RoleId   uint `gorm:"default:1"`
 }
