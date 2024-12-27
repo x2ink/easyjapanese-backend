@@ -13,7 +13,7 @@ func main() {
 	router := gin.Default()
 	router.Use(cors.Default())
 	handlers.Execute(router)
-	if err := router.Run(":8081"); err != nil {
+	if err := router.Run(); err != nil {
 		return
 	}
 }
