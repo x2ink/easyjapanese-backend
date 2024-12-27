@@ -74,10 +74,9 @@ func (h *WordHandler) JaSearch(c *gin.Context) {
 	}
 	val := c.Param("val")
 	searchTerm := fmt.Sprintf("%%%s%%", val)
-	query := db.DB.Model(models.Jadict{}).Select("word", "kana", "detail", "id", "deleted_at").Where("word LIKE ? OR kana LIKE ?", searchTerm, searchTerm)
 	var total int64
-	query.Limit(size).Offset(size * (page - 1)).Find(&Word)
-	query.Count(&total)
+	db.DB.Model(models.Jadict{}).Select("word", "kana", "detail", "id", "deleted_at").Where("word LIKE ? OR kana LIKE ?", searchTerm, searchTerm).Limit(size).Offset(size * (page - 1)).Find(&Word)
+	db.DB.Model(models.Jadict{}).Select("word", "kana", "detail", "id", "deleted_at").Where("word LIKE ? OR kana LIKE ?", searchTerm, searchTerm).Count(&total)
 	if total > 0 {
 		for _, v := range Word {
 			Res1.Meaning = GetMeaning(v.Detail)
