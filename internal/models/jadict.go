@@ -1,6 +1,6 @@
 package models
 
-import "gorm.io/gorm"
+import "time"
 
 type Read struct {
 	Top  string `json:"top"`
@@ -25,13 +25,16 @@ type Detail struct {
 }
 
 type Jadict struct {
-	gorm.Model
-	Word   string   `json:"word"`
-	Tone   string   `json:"tone"`
-	Rome   string   `json:"rome"`
-	Voice  string   `json:"voice"`
-	Kana   string   `json:"kana"`
-	Detail []Detail `json:"detail" gorm:"serializer:json"`
+	ID        uint       `json:"id"` // 将 ID 的 JSON 名称设置为小写的 "id"
+	CreatedAt time.Time  `json:"created_at"`
+	UpdatedAt time.Time  `json:"updated_at"`
+	DeletedAt *time.Time `json:"deleted_at,omitempty"`
+	Word      string     `json:"word"`
+	Tone      string     `json:"tone"`
+	Rome      string     `json:"rome"`
+	Voice     string     `json:"voice"`
+	Kana      string     `json:"kana"`
+	Detail    []Detail   `json:"detail" gorm:"serializer:json"`
 }
 
 func (Jadict) TableName() string {
