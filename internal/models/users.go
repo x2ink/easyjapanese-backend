@@ -1,11 +1,13 @@
 package models
 
-import "time"
+import (
+	"time"
+)
 
 type Users struct {
-	ID        uint       `json:"id"` // 将 ID 的 JSON 名称设置为小写的 "id"
-	CreatedAt time.Time  `json:"created_at"`
-	UpdatedAt time.Time  `json:"updated_at"`
+	ID        uint       `json:"id"`
+	CreatedAt time.Time  `json:"created_at,omitempty"`
+	UpdatedAt time.Time  `json:"updated_at,omitempty"`
 	DeletedAt *time.Time `json:"deleted_at,omitempty"`
 	Nickname  string
 	Email     string
@@ -15,5 +17,7 @@ type Users struct {
 	Os        string
 	Device    string
 	Ip        string
-	RoleId    uint `gorm:"default:1"`
+	Avatar    string
+	RoleID    uint `gorm:"default:1"`
+	Role      Role `gorm:"constraint:OnUpdate:CASCADE,OnDelete:SET NULL;"`
 }

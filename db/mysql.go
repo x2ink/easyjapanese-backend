@@ -11,7 +11,9 @@ var DB *gorm.DB
 
 func InitMysql() {
 	dsn := fmt.Sprintf("%s:%s@tcp(%s)/easyjapanese?charset=utf8mb4&parseTime=True&loc=Local", config.DBUsername, config.DBPassword, config.MysqlAddress)
-	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{})
+	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{
+		PrepareStmt: true,
+	})
 	if err != nil {
 		return
 	}

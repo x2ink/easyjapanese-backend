@@ -3,8 +3,10 @@ package handlers
 import (
 	"easyjapanese/db"
 	"easyjapanese/internal/models"
+	"errors"
 	"fmt"
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -64,12 +66,16 @@ func (h *WordHandler) CjInfo(c *gin.Context) {
 	}
 	var res ChRes
 	var Word models.Chdict
-	db.DB.Model(models.Chdict{}).First(&Word, id)
+	err = db.DB.Select("ch", "ja", "pinyin").Model(models.Chdict{}).First(&Word, id).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		c.JSON(http.StatusNotFound, gin.H{"err": "The word does not exist"})
+		return
+	}
 	res.Ch = Word.Ch
 	res.Pinyin = Word.Pinyin
 	var JaWords []models.Jadict
 	if len(Word.Ja) > 0 {
-		db.DB.Model(&models.Jadict{}).Where("word IN ?", Word.Ja).Find(&JaWords)
+		db.DB.Select("detail", "id", "kana", "word").Model(&models.Jadict{}).Where("word IN ?", Word.Ja).Find(&JaWords)
 	}
 	var Res1 Res
 	for _, v1 := range JaWords {
@@ -91,7 +97,7 @@ func (h *WordHandler) JcInfo(c *gin.Context) {
 		return
 	}
 	var Word models.Jadict
-	db.DB.Model(models.Jadict{}).First(&Word, id)
+	db.DB.Model(models.Jadict{}).Omit("created_at", "updated_at").First(&Word, id)
 	c.JSON(http.StatusOK, gin.H{
 		"msg":  "Successfully obtained",
 		"data": Word,
