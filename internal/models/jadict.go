@@ -1,6 +1,6 @@
 package models
 
-import "time"
+import "gorm.io/gorm"
 
 type Read struct {
 	Top  string `json:"top"`
@@ -25,16 +25,14 @@ type Detail struct {
 }
 
 type Jadict struct {
-	ID        uint       `json:"id"`
-	CreatedAt time.Time  `json:"created_at,omitempty"`
-	UpdatedAt time.Time  `json:"updated_at,omitempty"`
-	DeletedAt *time.Time `json:"deleted_at,omitempty"`
-	Word      string     `json:"word"`
-	Tone      string     `json:"tone"`
-	Rome      string     `json:"rome"`
-	Voice     string     `json:"voice"`
-	Kana      string     `json:"kana"`
-	Detail    []Detail   `json:"detail" gorm:"serializer:json"`
+	gorm.Model
+	ID     uint     `json:"id"`
+	Word   string   `json:"word"`
+	Tone   string   `json:"tone"`
+	Rome   string   `json:"rome"`
+	Voice  string   `json:"voice"`
+	Kana   string   `json:"kana"`
+	Detail []Detail `json:"detail" gorm:"serializer:json"`
 }
 
 func (Jadict) TableName() string {

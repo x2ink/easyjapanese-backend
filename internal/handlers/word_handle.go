@@ -1,7 +1,7 @@
 package handlers
 
 import (
-	"easyjapanese/db"
+	. "easyjapanese/db"
 	"easyjapanese/internal/models"
 	"errors"
 	"fmt"
@@ -17,26 +17,24 @@ type WordHandler struct{}
 func (h *WordHandler) WordRoutes(router *gin.Engine) {
 	jc := router.Group("/jc")
 	{
-		jc.POST("/add", h.JcAddWord)
-		jc.GET("/search/:page/:size/:val", h.JcSearch)
-		jc.GET("/info/:id", h.JcInfo)
+		jc.POST("/add", h.jcAddWord)
+		jc.GET("/search/:page/:size/:val", h.jcSearch)
+		jc.GET("/info/:id", h.jcInfo)
 	}
 	cj := router.Group("/cj")
 	{
-		cj.POST("/add", h.JcAddWord)
-		cj.GET("/search/:page/:size/:val", h.CjSearch)
-		cj.GET("/info/:id", h.CjInfo)
+		cj.POST("/add", h.jcAddWord)
+		cj.GET("/search/:page/:size/:val", h.cjSearch)
+		cj.GET("/info/:id", h.cjInfo)
 	}
 }
-func (h *WordHandler) JcAddWord(c *gin.Context) {
+func (h *WordHandler) jcAddWord(c *gin.Context) {
 	var Word models.Jadict
-	{
-	}
 	if err := c.ShouldBindJSON(&Word); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"err": err.Error()})
 		return
 	}
-	result := db.DB.Create(&Word)
+	result := DB.Create(&Word)
 	if result.Error != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"err": result.Error.Error()})
 		return
@@ -58,7 +56,7 @@ type ChRes struct {
 	Result []Res  `json:"result"`
 }
 
-func (h *WordHandler) CjInfo(c *gin.Context) {
+func (h *WordHandler) cjInfo(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"err": "The id format is incorrect"})
@@ -66,7 +64,7 @@ func (h *WordHandler) CjInfo(c *gin.Context) {
 	}
 	var res ChRes
 	var Word models.Chdict
-	err = db.DB.Select("ch", "ja", "pinyin").Model(models.Chdict{}).First(&Word, id).Error
+	err = DB.Select("ch", "ja", "pinyin").Model(models.Chdict{}).First(&Word, id).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		c.JSON(http.StatusNotFound, gin.H{"err": "The word does not exist"})
 		return
@@ -75,11 +73,11 @@ func (h *WordHandler) CjInfo(c *gin.Context) {
 	res.Pinyin = Word.Pinyin
 	var JaWords []models.Jadict
 	if len(Word.Ja) > 0 {
-		db.DB.Select("detail", "id", "kana", "word").Model(&models.Jadict{}).Where("word IN ?", Word.Ja).Find(&JaWords)
+		DB.Select("detail", "id", "kana", "word").Model(&models.Jadict{}).Where("word IN ?", Word.Ja).Find(&JaWords)
 	}
 	var Res1 Res
 	for _, v1 := range JaWords {
-		Res1.Meaning = GetMeaning(v1.Detail)
+		Res1.Meaning = getMeaning(v1.Detail)
 		Res1.ID = v1.ID
 		Res1.Kana = v1.Kana
 		Res1.Word = v1.Word
@@ -90,20 +88,20 @@ func (h *WordHandler) CjInfo(c *gin.Context) {
 		"data": res,
 	})
 }
-func (h *WordHandler) JcInfo(c *gin.Context) {
+func (h *WordHandler) jcInfo(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"err": "The id format is incorrect"})
 		return
 	}
 	var Word models.Jadict
-	db.DB.Model(models.Jadict{}).Omit("created_at", "updated_at").First(&Word, id)
+	DB.Model(models.Jadict{}).Omit("created_at", "updated_at").First(&Word, id)
 	c.JSON(http.StatusOK, gin.H{
 		"msg":  "Successfully obtained",
 		"data": Word,
 	})
 }
-func (h *WordHandler) JcSearch(c *gin.Context) {
+func (h *WordHandler) jcSearch(c *gin.Context) {
 	var Res1 Res
 	var Res2 []Res
 	var Word []models.Jadict
@@ -120,11 +118,11 @@ func (h *WordHandler) JcSearch(c *gin.Context) {
 	val := c.Param("val")
 	searchTerm := fmt.Sprintf("%%%s%%", val)
 	var total int64
-	db.DB.Model(models.Jadict{}).Select("word", "kana", "detail", "id", "deleted_at").Where("word LIKE ? OR kana LIKE ?", searchTerm, searchTerm).Limit(size).Offset(size * (page - 1)).Find(&Word)
-	db.DB.Model(models.Jadict{}).Select("word", "kana", "detail", "id", "deleted_at").Where("word LIKE ? OR kana LIKE ?", searchTerm, searchTerm).Count(&total)
+	DB.Model(models.Jadict{}).Select("word", "kana", "detail", "id", "deleted_at").Where("word LIKE ? OR kana LIKE ?", searchTerm, searchTerm).Limit(size).Offset(size * (page - 1)).Find(&Word)
+	DB.Model(models.Jadict{}).Select("word", "kana", "detail", "id", "deleted_at").Where("word LIKE ? OR kana LIKE ?", searchTerm, searchTerm).Count(&total)
 	if total > 0 {
 		for _, v := range Word {
-			Res1.Meaning = GetMeaning(v.Detail)
+			Res1.Meaning = getMeaning(v.Detail)
 			Res1.ID = v.ID
 			Res1.Kana = v.Kana
 			Res1.Word = v.Word
@@ -137,7 +135,7 @@ func (h *WordHandler) JcSearch(c *gin.Context) {
 		"total": total,
 	})
 }
-func (h *WordHandler) CjSearch(c *gin.Context) {
+func (h *WordHandler) cjSearch(c *gin.Context) {
 	page, err := strconv.Atoi(c.Param("page"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"err": "The page format is incorrect"})
@@ -152,8 +150,8 @@ func (h *WordHandler) CjSearch(c *gin.Context) {
 	val := c.Param("val")
 	searchTerm := fmt.Sprintf("%%%s%%", val)
 	var total int64
-	db.DB.Model(models.Chdict{}).Select("ch", "id", "pinyin", "deleted_at").Where("ch LIKE ?", searchTerm).Limit(size).Offset(size * (page - 1)).Find(&Word)
-	db.DB.Model(models.Chdict{}).Select("ch", "id", "pinyin", "deleted_at").Where("ch LIKE ?", searchTerm).Count(&total)
+	DB.Model(models.Chdict{}).Select("ch", "id", "pinyin", "deleted_at").Where("ch LIKE ?", searchTerm).Limit(size).Offset(size * (page - 1)).Find(&Word)
+	DB.Model(models.Chdict{}).Select("ch", "id", "pinyin", "deleted_at").Where("ch LIKE ?", searchTerm).Count(&total)
 	c.JSON(http.StatusOK, gin.H{
 		"msg":   "Successfully obtained",
 		"data":  Word,
@@ -172,7 +170,7 @@ func removeParenthesesContent(input string) string {
 
 	return result
 }
-func GetMeaning(detail []models.Detail) []string {
+func getMeaning(detail []models.Detail) []string {
 	var res []string
 	for _, v := range detail {
 		for _, v1 := range v.Detail {

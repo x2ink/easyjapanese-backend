@@ -12,9 +12,11 @@ func Execute(router *gin.Engine) {
 		})
 	})
 	Userhandler := &UserHandler{}
-	Userhandler.RegisterRoutes(router)
+	Userhandler.UserRoutes(router)
 	Captchahandler := &CaptchaHandler{}
 	Captchahandler.CaptchaRoutes(router)
 	Wordhandler := &WordHandler{}
 	Wordhandler.WordRoutes(router)
+	Trendhandler := &TrendHandler{}
+	Trendhandler.TrendRoutes(router)
 }

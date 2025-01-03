@@ -21,9 +21,9 @@ type Captcha struct {
 type CaptchaHandler struct{}
 
 func (h *CaptchaHandler) CaptchaRoutes(router *gin.Engine) {
-	router.GET("/captcha/:capType/:email", h.GetCaptcha)
+	router.GET("/captcha/:capType/:email", h.getCaptcha)
 }
-func (h *CaptchaHandler) GetCaptcha(c *gin.Context) {
+func (h *CaptchaHandler) getCaptcha(c *gin.Context) {
 	capType := c.Param("capType")
 	email := c.Param("email")
 	code := utils.GenerateRandomString(6, "number")
