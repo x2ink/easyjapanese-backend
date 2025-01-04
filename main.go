@@ -11,6 +11,10 @@ func main() {
 	db.InitMysql()
 	db.InitRedis()
 	router := gin.Default()
+	err := router.SetTrustedProxies([]string{})
+	if err != nil {
+		return
+	}
 	router.Use(cors.Default())
 	handlers.Execute(router)
 	if err := router.Run(); err != nil {

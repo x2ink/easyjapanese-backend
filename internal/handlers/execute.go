@@ -19,4 +19,6 @@ func Execute(router *gin.Engine) {
 	Wordhandler.WordRoutes(router)
 	Trendhandler := &TrendHandler{}
 	Trendhandler.TrendRoutes(router)
+	Likehandler := &LikeHandler{}
+	Likehandler.LikeRoutes(router)
 }
