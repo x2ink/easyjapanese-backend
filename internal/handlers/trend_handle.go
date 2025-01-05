@@ -23,7 +23,6 @@ type userInfo struct {
 	Role     string `json:"role"`
 }
 type trendResp struct {
-	Title     string    `json:"title"`
 	Content   string    `json:"content"`
 	Browse    int       `json:"browse"`
 	Like      int       `json:"like"`
@@ -42,6 +41,62 @@ func (h *TrendHandler) TrendRoutes(router *gin.Engine) {
 	v1.GET("/list/:page/:size/:section", h.getList)
 }
 
+func getTrendIds(trends []models.Trend) []uint {
+	var ids []uint
+	for _, trend := range trends {
+		ids = append(ids, trend.ID)
+	}
+	return ids
+}
+
+func filterImagesByTrendId(images []models.Image, trendId uint) []string {
+	var imageUrls []string
+	for _, img := range images {
+		if img.TargetID == trendId {
+			imageUrls = append(imageUrls, img.Url)
+		}
+	}
+	return imageUrls
+}
+func trendList(c *gin.Context, trends []models.Trend, total int64) {
+	var images []models.Image
+	ids := getTrendIds(trends)
+	DB.Where("target = ? AND target_id IN (?)", "trend", ids).Find(&images)
+	var likeCounts []struct {
+		TargetID int64 `json:"target_id"`
+		Count    int64 `json:"count"`
+	}
+	DB.Model(&models.Like{}).Select("target_id, COUNT(*) as count").Where("target = ? AND target_id IN (?)", "trend", ids).Group("target_id").Find(&likeCounts)
+	likeCountsMap := make(map[int64]int64)
+	for _, likeCount := range likeCounts {
+		likeCountsMap[likeCount.TargetID] = likeCount.Count
+	}
+	var searchRes []trendResp
+	for _, trend := range trends {
+		address, _ := utils.GetIpAddress(trend.User.Ip)
+		trendRes := trendResp{
+			Images:    filterImagesByTrendId(images, trend.ID),
+			Content:   trend.Content,
+			Browse:    trend.Browse,
+			Like:      int(likeCountsMap[int64(trend.ID)]),
+			CreatedAt: trend.CreatedAt,
+			SectionId: trend.SectionID,
+			User: userInfo{
+				Id:       trend.UserID,
+				Avatar:   trend.User.Avatar,
+				Nickname: trend.User.Nickname,
+				Address:  address,
+				Role:     trend.User.Role.Name,
+			},
+		}
+		searchRes = append(searchRes, trendRes)
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"msg":   "Successfully obtained",
+		"data":  searchRes,
+		"total": total,
+	})
+}
 func (h *TrendHandler) getList(c *gin.Context) {
 	page, err := strconv.Atoi(c.Param("page"))
 	if err != nil {
@@ -62,48 +117,7 @@ func (h *TrendHandler) getList(c *gin.Context) {
 	var trends []models.Trend
 	DB.Preload("User").Where("section_id = ?", section).Limit(size).Offset(size * (page - 1)).Find(&trends)
 	DB.Model(&models.Trend{}).Where("section_id = ?", section).Count(&total)
-	var images []models.Image
-	DB.Where("target = ?", "trend").Find(&images)
-	var likes []models.Like
-	DB.Where("target = ?", "trend").Find(&likes)
-	var searchRes []trendResp
-	for _, trend := range trends {
-		address, _ := utils.GetIpAddress(trend.User.Ip)
-		image := []string{}
-		likeCount := 0
-		for _, v := range images {
-			if trend.ID == v.TargetID {
-				image = append(image, v.Url)
-			}
-		}
-		for _, v := range likes {
-			if trend.ID == v.TargetID {
-				likeCount++
-			}
-		}
-		trendRes := trendResp{
-			Images:    image,
-			Title:     trend.Title,
-			Content:   trend.Content,
-			Browse:    trend.Browse,
-			Like:      likeCount,
-			CreatedAt: trend.CreatedAt,
-			SectionId: trend.SectionID,
-			User: userInfo{
-				Id:       trend.UserID,
-				Avatar:   trend.User.Avatar,
-				Nickname: trend.User.Nickname,
-				Address:  address,
-				Role:     trend.User.Role.Name,
-			},
-		}
-		searchRes = append(searchRes, trendRes)
-	}
-	c.JSON(http.StatusOK, gin.H{
-		"msg":   "Successfully obtained",
-		"data":  searchRes,
-		"total": total,
-	})
+	trendList(c, trends, total)
 }
 func (h *TrendHandler) search(c *gin.Context) {
 	page, err := strconv.Atoi(c.Param("page"))
@@ -122,53 +136,11 @@ func (h *TrendHandler) search(c *gin.Context) {
 	var trends []models.Trend
 	DB.Preload("User").Where("title LIKE ? OR content LIKE ?", searchTerm, searchTerm).Limit(size).Offset(size * (page - 1)).Find(&trends)
 	DB.Model(&models.Trend{}).Where("title LIKE ? OR content LIKE ?", searchTerm, searchTerm).Count(&total)
-	var images []models.Image
-	DB.Where("target = ?", "trend").Find(&images)
-	var likes []models.Like
-	DB.Where("target = ?", "trend").Find(&likes)
-	var searchRes []trendResp
-	for _, trend := range trends {
-		address, _ := utils.GetIpAddress(trend.User.Ip)
-		image := []string{}
-		likeCount := 0
-		for _, v := range images {
-			if trend.ID == v.TargetID {
-				image = append(image, v.Url)
-			}
-		}
-		for _, v := range likes {
-			if trend.ID == v.TargetID {
-				likeCount++
-			}
-		}
-		trendRes := trendResp{
-			Images:    image,
-			Title:     trend.Title,
-			Content:   trend.Content,
-			Browse:    trend.Browse,
-			Like:      likeCount,
-			CreatedAt: trend.CreatedAt,
-			SectionId: trend.SectionID,
-			User: userInfo{
-				Id:       trend.UserID,
-				Avatar:   trend.User.Avatar,
-				Nickname: trend.User.Nickname,
-				Address:  address,
-				Role:     trend.User.Role.Name,
-			},
-		}
-		searchRes = append(searchRes, trendRes)
-	}
-	c.JSON(http.StatusOK, gin.H{
-		"msg":   "Successfully obtained",
-		"data":  searchRes,
-		"total": total,
-	})
+	trendList(c, trends, total)
 }
 func (h *TrendHandler) addTrend(c *gin.Context) {
 	var Req struct {
 		Content   string   `json:"content" binding:"required"`
-		Title     string   `json:"title" binding:"required"`
 		SectionId int      `json:"section_id" binding:"required"`
 		Images    []string `json:"images" binding:"required"`
 	}
@@ -178,7 +150,6 @@ func (h *TrendHandler) addTrend(c *gin.Context) {
 		return
 	}
 	trend := models.Trend{
-		Title:     Req.Title,
 		Content:   Req.Content,
 		UserID:    UserId.(uint),
 		SectionID: Req.SectionId,
@@ -224,7 +195,6 @@ func (h *TrendHandler) getInfo(c *gin.Context) {
 	DB.Model(&models.Like{}).Where("target = ? AND target_id = ?", "trend", Trend.ID).Count(&likeCount)
 	trendResp := trendResp{
 		CreatedAt: Trend.CreatedAt,
-		Title:     Trend.Title,
 		Content:   Trend.Content,
 		Browse:    Trend.Browse,
 		Like:      int(likeCount),

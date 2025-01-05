@@ -21,4 +21,8 @@ func Execute(router *gin.Engine) {
 	Trendhandler.TrendRoutes(router)
 	Likehandler := &LikeHandler{}
 	Likehandler.LikeRoutes(router)
+	Sectionhandler := &SectionHandler{}
+	Sectionhandler.SectionRoutes(router)
+	Filehandler := &FileHandler{}
+	Filehandler.FileRoutes(router)
 }

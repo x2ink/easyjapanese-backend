@@ -7,7 +7,6 @@ import (
 type Trend struct {
 	gorm.Model
 	ID        uint   `json:"id"`
-	Title     string `gorm:"type:varchar(255);default:null" json:"title" binding:"required"`
 	Content   string `gorm:"type:longtext;default:null" json:"content" binding:"required"`
 	UserID    uint   `gorm:"index" json:"user_id"`
 	User      Users  `gorm:"foreignKey:UserID" json:"user"`
