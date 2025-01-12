@@ -74,7 +74,6 @@ func (h *UserHandler) getSimpleUserInfo(c *gin.Context) {
 		})
 		return
 	}
-	address, err := utils.GetIpAddress(User.Ip)
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"err": "Address acquisition failed"})
 	}
@@ -82,7 +81,6 @@ func (h *UserHandler) getSimpleUserInfo(c *gin.Context) {
 		"nickname": User.Nickname,
 		"email":    User.Email,
 		"avatar":   User.Avatar,
-		"address":  address,
 		"role":     User.Role.Name,
 	}})
 }
