@@ -60,14 +60,14 @@ func (h *UserHandler) resetToken(c *gin.Context) {
 			UserId: user.ID,
 		}
 		token := utils.EncryptToken(tokenData)
-		c.JSON(http.StatusResetContent, gin.H{"msg": "Successful reset", "data": token})
+		c.JSON(http.StatusOK, gin.H{"msg": "Successful reset", "data": token})
 		return
 	}
 }
 func (h *UserHandler) getSimpleUserInfo(c *gin.Context) {
 	UserId, _ := c.Get("UserId")
 	var User models.Users
-	err := DB.Preload("Role").Select("nickname", "email", "avatar", "ip", "role_id").First(&User, UserId).Error
+	err := DB.Preload("Role").Select("nickname", "email", "avatar", "ip", "role_id", "id").First(&User, UserId).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		c.JSON(http.StatusNotFound, gin.H{
 			"msg": "User does not exist",
@@ -78,6 +78,7 @@ func (h *UserHandler) getSimpleUserInfo(c *gin.Context) {
 		c.JSON(http.StatusBadGateway, gin.H{"err": "Address acquisition failed"})
 	}
 	c.JSON(http.StatusOK, gin.H{"msg": "Successfully obtained", "data": map[string]interface{}{
+		"id":       User.ID,
 		"nickname": User.Nickname,
 		"email":    User.Email,
 		"avatar":   User.Avatar,

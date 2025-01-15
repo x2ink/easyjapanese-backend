@@ -2,6 +2,7 @@ package handlers
 
 import (
 	. "easyjapanese/db"
+	"easyjapanese/internal/middleware"
 	"easyjapanese/internal/models"
 	"errors"
 	"fmt"
@@ -13,8 +14,19 @@ import (
 )
 
 type WordHandler struct{}
+type wordBookRes struct {
+	Name     string `json:"name"`
+	Category string `json:"category"`
+	Icon     string `json:"icon"`
+	Words    int    `json:"words"`
+	ID       uint   `json:"id"`
+	Describe string `json:"describe"`
+}
 
 func (h *WordHandler) WordRoutes(router *gin.Engine) {
+	router.GET("/wordbook", getWordBook)
+	router.GET("/todayword", middleware.User(), getTodayWord)
+	router.GET("/wordbook/:id/:page/:size", getWordBookList)
 	jc := router.Group("/jc")
 	{
 		jc.POST("/add", h.jcAddWord)
@@ -28,6 +40,81 @@ func (h *WordHandler) WordRoutes(router *gin.Engine) {
 		cj.GET("/info/:id", h.cjInfo)
 	}
 }
+func getTodayWord(c *gin.Context) {
+	UserId, _ := c.Get("UserId")
+	var config models.UserConfig
+	DB.First(&config, "user_id = ?", UserId)
+	wordbooks := []models.WordBookRelation{}
+	result := []Res{}
+	DB.Order("id desc").Preload("Word").Where("book_id = ?", config.BookID).Limit(config.Dailylearning).Offset(1).Find(&wordbooks)
+	for _, book := range wordbooks {
+		result = append(result, Res{
+			Word:    book.Word.Word,
+			Kana:    book.Word.Kana,
+			ID:      book.Word.ID,
+			Meaning: getMeaning(book.Word.Detail),
+		})
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"data": result,
+		"msg":  "Successfully obtained",
+	})
+}
+func getWordBookList(c *gin.Context) {
+	page, err := strconv.Atoi(c.Param("page"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"err": "The page format is incorrect"})
+		return
+	}
+	size, err := strconv.Atoi(c.Param("size"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"err": "The size format is incorrect"})
+		return
+	}
+	bookId, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid ID format"})
+		return
+	}
+	wordbooks := []models.WordBookRelation{}
+	result := []Res{}
+	var total int64
+	DB.Order("id desc").Preload("Word").Where("book_id = ?", bookId).Limit(size).Offset(size * (page - 1)).Find(&wordbooks)
+	DB.Model(models.WordBookRelation{}).Where("book_id = ?", bookId).Count(&total)
+	for _, book := range wordbooks {
+		result = append(result, Res{
+			Word:    book.Word.Word,
+			Kana:    book.Word.Kana,
+			ID:      book.Word.ID,
+			Meaning: getMeaning(book.Word.Detail),
+		})
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"data":  result,
+		"total": total,
+		"msg":   "Successfully obtained",
+	})
+}
+func getWordBook(c *gin.Context) {
+	res := []wordBookRes{}
+	wordbook := []models.Wordbook{}
+	DB.Model(&models.Wordbook{}).Preload("Words").Find(&wordbook)
+	for _, word := range wordbook {
+		res = append(res, wordBookRes{
+			ID:       word.ID,
+			Name:     word.Name,
+			Icon:     word.Icon,
+			Category: word.Category,
+			Words:    len(word.Words),
+			Describe: word.Describe,
+		})
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"data": res,
+		"msg":  "Successfully obtained",
+	})
+}
+
 func (h *WordHandler) jcAddWord(c *gin.Context) {
 	var Word models.Jadict
 	if err := c.ShouldBindJSON(&Word); err != nil {
@@ -118,7 +205,7 @@ func (h *WordHandler) jcSearch(c *gin.Context) {
 	val := c.Param("val")
 	searchTerm := fmt.Sprintf("%%%s%%", val)
 	var total int64
-	DB.Model(models.Jadict{}).Select("word", "kana", "detail", "id", "deleted_at").Where("word LIKE ? OR kana LIKE ?", searchTerm, searchTerm).Limit(size).Offset(size * (page - 1)).Find(&Word)
+	DB.Model(models.Jadict{}).Select("word", "kana", "detail", "id", "deleted_at").Where("word LIKE ? OR kana LIKE ?", searchTerm, searchTerm).Order("LENGTH(word) ASC").Limit(size).Offset(size * (page - 1)).Find(&Word)
 	DB.Model(models.Jadict{}).Select("word", "kana", "detail", "id", "deleted_at").Where("word LIKE ? OR kana LIKE ?", searchTerm, searchTerm).Count(&total)
 	if total > 0 {
 		for _, v := range Word {
