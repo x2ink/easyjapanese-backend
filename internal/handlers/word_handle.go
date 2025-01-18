@@ -8,9 +8,12 @@ import (
 	"fmt"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
+	"math/rand"
 	"net/http"
 	"regexp"
 	"strconv"
+	"strings"
+	"time"
 )
 
 type WordHandler struct{}
@@ -39,21 +42,234 @@ func (h *WordHandler) WordRoutes(router *gin.Engine) {
 		cj.GET("/search/:page/:size/:val", h.cjSearch)
 		cj.GET("/info/:id", h.cjInfo)
 	}
+	learn := router.Group("/learn").Use(middleware.User())
+	{
+		learn.POST("record/add", addLearnRecord)
+		learn.GET("writefrommemoory", getWriteFromMemory)
+	}
+}
+
+type writeFromMemory struct {
+	Word       string `json:"word"`
+	Meaning    string `json:"meaning"`
+	Kana       string `json:"kana"`
+	Tone       string `json:"tone"`
+	ID         uint   `json:"id"`
+	ErrorCount uint   `json:"error_count"`
+	Rome       string `json:"rome"`
+	Voice      string `json:"voice"`
+}
+
+func getWriteFromMemory(c *gin.Context) {
+	now := time.Now()
+	midnight := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	midnightTimestamp := midnight.Unix()
+	words := []models.LearnRecord{}
+	writeFromMemorys := []writeFromMemory{}
+	DB.Order("id desc").Preload("Word").Where("review_time > ?", midnightTimestamp).Find(&words)
+	for _, word := range words {
+		writeFromMemorys = append(writeFromMemorys, writeFromMemory{
+			Word:       word.Word.Word,
+			Meaning:    strings.Join(getMeaning(word.Word.Detail), ";"),
+			Kana:       word.Word.Kana,
+			Tone:       word.Word.Tone,
+			ID:         word.WordID,
+			ErrorCount: 0,
+			Rome:       word.Word.Rome,
+			Voice:      word.Word.Voice,
+		})
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"data": writeFromMemorys,
+	})
+}
+
+type option struct {
+	Text   string `json:"text"`
+	Answer bool   `json:"answer"`
+}
+type todayWordRes struct {
+	Tone          string          `json:"tone"`
+	ErrorCount    int             `json:"error_count"`
+	Progress      []bool          `json:"progress"`
+	Meaning       string          `json:"meaning"`
+	Word          string          `json:"word"`
+	Kana          string          `json:"kana"`
+	ID            uint            `json:"id"`
+	Rome          string          `json:"rome"`
+	Voice         string          `json:"voice"`
+	Detail        []models.Detail `json:"detail" gorm:"serializer:json"`
+	KanaOption    []option        `json:"kana_option"`
+	MeaningOption []option        `json:"meaning_option"`
+	WordOption    []option        `json:"word_option"`
+	VoiceOption   []option        `json:"voice_option"`
+}
+
+func extractKanaFromEnd(input string) string {
+	hasKanji := regexp.MustCompile(`[一-龯]`).FindString(input)
+	if hasKanji == "" {
+		return ""
+	}
+	re := regexp.MustCompile(`[ぁ-んァ-ンー]+$`)
+	matches := re.FindString(input)
+	if matches != "" {
+		return matches
+	}
+	return ""
+}
+func getKanaOption(word string, kana string) []option {
+	runes := []rune(kana)
+	suffix := extractKanaFromEnd(word)
+	options := []option{}
+	if suffix != "" {
+		var jadicts []models.Jadict
+		DB.Select("kana").Where("kana LIKE ? AND kana != ? AND CHAR_LENGTH(kana)<7", fmt.Sprintf("%%%s", suffix), kana).Limit(3).Find(&jadicts)
+		notin := []string{}
+		for _, jadict := range jadicts {
+			options = append(options, option{
+				Text:   retainKana(jadict.Kana),
+				Answer: false,
+			})
+			notin = append(notin, jadict.Kana)
+		}
+		options = append(options, option{
+			Text:   retainKana(kana),
+			Answer: true,
+		})
+		notin = append(notin, kana)
+		if len(options) < 4 {
+			var randoms []models.Jadict
+			DB.Select("kana").Where("kana NOT IN ? AND CHAR_LENGTH(kana)<7", notin).Limit(4 - len(options)).Find(&randoms)
+			for _, random := range randoms {
+				options = append(options, option{
+					Text:   retainKana(random.Kana),
+					Answer: false,
+				})
+			}
+		}
+	} else {
+		if word != kana {
+			var randoms2 []models.Jadict
+			DB.Select("kana").Where("kana LIKE ? AND CHAR_LENGTH(kana)<7", fmt.Sprintf("%s%%", string(runes[:2]))).Limit(3).Find(&randoms2)
+			for _, random := range randoms2 {
+				options = append(options, option{
+					Text:   retainKana(random.Kana),
+					Answer: false,
+				})
+			}
+			options = append(options, option{
+				Text:   retainKana(kana),
+				Answer: true,
+			})
+		}
+	}
+	return options
+}
+func getRandomElements(slice []models.WordBookRelation, n int) []models.WordBookRelation {
+	if n > len(slice) {
+		return nil
+	}
+	indices := rand.Perm(len(slice))
+	result := make([]models.WordBookRelation, n)
+	for i := 0; i < n; i++ {
+		result[i] = slice[indices[i]]
+	}
+	return result
+}
+func getMeaningOption(word models.Jadict, randomWords []models.WordBookRelation) []option {
+	options := []option{}
+	wordbooks := getRandomElements(randomWords, 3)
+	for _, wordbook := range wordbooks {
+		options = append(options, option{
+			Answer: false,
+			Text:   strings.Join(getMeaning(wordbook.Word.Detail), ";"),
+		})
+	}
+	options = append(options, option{
+		Answer: true,
+		Text:   strings.Join(getMeaning(word.Detail), ";"),
+	})
+	return options
+}
+func retainKana(input string) string {
+	re := regexp.MustCompile(`[^\x{3040}-\x{309F}\x{30A0}-\x{30FF}]`)
+	result := re.ReplaceAllString(input, "")
+	return result
+}
+func getWordOption(word models.Jadict, randomWords []models.WordBookRelation) []option {
+	options := []option{}
+	wordbooks := getRandomElements(randomWords, 3)
+	for _, wordbook := range wordbooks {
+		options = append(options, option{
+			Answer: false,
+			Text:   wordbook.Word.Kana,
+		})
+	}
+	options = append(options, option{
+		Answer: true,
+		Text:   word.Kana,
+	})
+	return options
+}
+func getVoiceOption(word models.Jadict, randomWords []models.WordBookRelation) []option {
+	options := []option{}
+	wordbooks := getRandomElements(randomWords, 3)
+	for _, wordbook := range wordbooks {
+		options = append(options, option{
+			Answer: false,
+			Text:   wordbook.Word.Word,
+		})
+	}
+	options = append(options, option{
+		Answer: true,
+		Text:   word.Word,
+	})
+	return options
 }
 func getTodayWord(c *gin.Context) {
 	UserId, _ := c.Get("UserId")
 	var config models.UserConfig
 	DB.First(&config, "user_id = ?", UserId)
 	wordbooks := []models.WordBookRelation{}
-	result := []Res{}
-	DB.Order("id desc").Preload("Word").Where("book_id = ?", config.BookID).Limit(config.Dailylearning).Offset(1).Find(&wordbooks)
-	for _, book := range wordbooks {
-		result = append(result, Res{
-			Word:    book.Word.Word,
-			Kana:    book.Word.Kana,
-			ID:      book.Word.ID,
-			Meaning: getMeaning(book.Word.Detail),
-		})
+	result := []todayWordRes{}
+	learnedWordIDs := []int{}
+	DB.Model(&models.LearnRecord{}).Where("user_id = ?", UserId).Pluck("word_id", &learnedWordIDs)
+	query := DB.Debug().Order("id desc").Preload("Word").Where("book_id = ?", config.BookID)
+	if len(learnedWordIDs) > 0 {
+		query = query.Where("word_id NOT IN ?", learnedWordIDs)
+	}
+	query.Limit(config.Dailylearning).Offset(1).Find(&wordbooks)
+	//获取随机单词
+	notin := []uint{}
+	for _, word := range wordbooks {
+		notin = append(notin, word.WordId)
+	}
+	randomWords := []models.WordBookRelation{}
+	DB.Order("RAND()").Preload("Word").Where("id NOT IN ?", notin).Limit(config.Dailylearning * 4).Find(&randomWords)
+	for _, word := range wordbooks {
+		var progress []bool
+		if word.Word.Kana == word.Word.Word {
+			progress = []bool{true, false, false, false}
+		} else {
+			progress = []bool{false, false, false, false}
+		}
+		today := todayWordRes{
+			Tone:          word.Word.Tone,
+			ErrorCount:    0,
+			Progress:      progress,
+			Meaning:       strings.Join(getMeaning(word.Word.Detail), ";"),
+			Word:          word.Word.Word,
+			Kana:          word.Word.Kana,
+			ID:            word.Word.ID,
+			Rome:          word.Word.Rome,
+			Voice:         word.Word.Voice,
+			Detail:        word.Word.Detail,
+			KanaOption:    getKanaOption(word.Word.Word, word.Word.Kana),
+			MeaningOption: getMeaningOption(word.Word, randomWords),
+			WordOption:    getWordOption(word.Word, randomWords),
+			VoiceOption:   getVoiceOption(word.Word, randomWords),
+		}
+		result = append(result, today)
 	}
 	c.JSON(http.StatusOK, gin.H{
 		"data": result,
@@ -247,7 +463,7 @@ func (h *WordHandler) cjSearch(c *gin.Context) {
 }
 func removeParenthesesContent(input string) string {
 	// 正则表达式，匹配所有括号和括号内的内容
-	re := regexp.MustCompile(`[（(\[【〔［].*?[］）)\]】〕]`)
+	re := regexp.MustCompile(`[（(\[【〔［「].*?[」］）)\]】〕]`)
 
 	// 替换匹配到的部分为空字符串
 	result := re.ReplaceAllString(input, "")
@@ -265,4 +481,29 @@ func getMeaning(detail []models.Detail) []string {
 		}
 	}
 	return res
+}
+
+// 新增学习记录
+func addLearnRecord(c *gin.Context) {
+	var learnRecord []models.LearnRecord
+	var Req struct {
+		Words []uint `json:"words"`
+	}
+	if err := c.ShouldBindJSON(&Req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"err": err.Error()})
+		return
+	}
+	timestamp := time.Now().Unix() + 86400
+	UserId, _ := c.Get("UserId")
+	for _, item := range Req.Words {
+		learnRecord = append(learnRecord, models.LearnRecord{
+			WordID:     item,
+			UserID:     UserId.(uint),
+			ReviewTime: timestamp,
+		})
+	}
+	DB.Create(&learnRecord)
+	c.JSON(http.StatusOK, gin.H{
+		"msg": "Record successful",
+	})
 }
