@@ -45,8 +45,70 @@ func (h *WordHandler) WordRoutes(router *gin.Engine) {
 	learn := router.Group("/learn").Use(middleware.User())
 	{
 		learn.POST("record/add", addLearnRecord)
-		learn.GET("writefrommemoory", getWriteFromMemory)
+		learn.GET("writefrommemory", getWriteFromMemory)
+		learn.GET("review", getReview)
+		learn.GET("info", getInfo)
 	}
+}
+func contains[T comparable](slice []T, target T) bool {
+	for _, v := range slice {
+		if v == target {
+			return true
+		}
+	}
+	return false
+}
+func getInfo(c *gin.Context) {
+	UserId, _ := c.Get("UserId")
+	learnRecords := []models.LearnRecord{}
+	DB.Order("created_at desc").Where("user_id = ?", UserId).Find(&learnRecords)
+	day := 0
+	now := time.Now()
+	midnight := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	dayTimestamp := midnight.Unix()
+	for k, v := range learnRecords {
+		timestamp := time.Date(v.CreatedAt.Year(), v.CreatedAt.Month(), v.CreatedAt.Day(), 0, 0, 0, 0, v.CreatedAt.Location()).Unix()
+		diffDays := int((dayTimestamp - timestamp) / 86400)
+		// 判断是否连续
+		if k == 0 && diffDays == 0 {
+			day = 1
+		} else if diffDays == k+1 {
+			day++
+		} else {
+			break
+		}
+	}
+	var userConfig models.UserConfig
+	DB.Preload("Book").Where("user_id = ?", UserId).First(&userConfig)
+	wordids := []uint{}
+	DB.Model(models.WordBookRelation{}).Where("book_id = ?", userConfig.BookID).Pluck("word_id", &wordids)
+	learnnum := 0
+	review := 0
+	learn := 0
+	endOfDay := midnight.Add(23*time.Hour + 59*time.Minute + 59*time.Second)
+	todayStart := time.Now().Truncate(24 * time.Hour)
+	todayEnd := todayStart.Add(24*time.Hour - 1*time.Second)
+	for _, v := range learnRecords {
+		if v.ReviewTime < endOfDay.Unix() {
+			review++
+		}
+		if v.CreatedAt.After(todayStart) && v.CreatedAt.Before(todayEnd) {
+			learn++
+		}
+		if contains(wordids, v.WordID) {
+			learnnum++
+		}
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"data": gin.H{
+			"bookname": userConfig.Book.Name,
+			"review":   review,
+			"learn":    learn,
+			"wordnum":  len(wordids),
+			"learnnum": learnnum,
+			"day":      day,
+		},
+	})
 }
 
 type writeFromMemory struct {
@@ -58,15 +120,75 @@ type writeFromMemory struct {
 	ErrorCount uint   `json:"error_count"`
 	Rome       string `json:"rome"`
 	Voice      string `json:"voice"`
+	Done       bool   `json:"done"`
+}
+type reviewRes struct {
+	Exercise      bool            `json:"exercise"`
+	Done          bool            `json:"done"`
+	Tone          string          `json:"tone"`
+	ErrorCount    int             `json:"error_count"`
+	Progress      []bool          `json:"progress"`
+	Meaning       []string        `json:"meaning"`
+	Word          string          `json:"word"`
+	Kana          string          `json:"kana"`
+	ID            uint            `json:"id"`
+	Rome          string          `json:"rome"`
+	Voice         string          `json:"voice"`
+	Detail        []models.Detail `json:"detail" gorm:"serializer:json"`
+	MeaningOption []option        `json:"meaning_option"`
 }
 
-func getWriteFromMemory(c *gin.Context) {
+func getReview(c *gin.Context) {
 	now := time.Now()
 	midnight := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
-	midnightTimestamp := midnight.Unix()
+	endOfDay := midnight.Add(23*time.Hour + 59*time.Minute + 59*time.Second)
+	endOfDayTimestamp := endOfDay.Unix()
+	words := []models.LearnRecord{}
+	DB.Order("id desc").Preload("Word").Where("review_time < ?", endOfDayTimestamp).Find(&words)
+	notin := []uint{}
+	for _, word := range words {
+		notin = append(notin, word.WordID)
+	}
+	randomWords := []models.WordBookRelation{}
+	DB.Order("RAND()").Preload("Word").Where("id NOT IN ?", notin).Limit(len(words) * 4).Find(&randomWords)
+	result := []reviewRes{}
+	for _, word := range words {
+		var progress []bool
+		if word.Word.Kana == word.Word.Word {
+			progress = []bool{false, false, false}
+		} else {
+			progress = []bool{false, false, false}
+		}
+		today := reviewRes{
+			Exercise:      false,
+			Done:          false,
+			Tone:          word.Word.Tone,
+			ErrorCount:    0,
+			Progress:      progress,
+			Meaning:       getMeaning(word.Word.Detail),
+			Word:          word.Word.Word,
+			Kana:          word.Word.Kana,
+			ID:            word.Word.ID,
+			Rome:          word.Word.Rome,
+			Voice:         word.Word.Voice,
+			Detail:        word.Word.Detail,
+			MeaningOption: getMeaningOption(word.Word, randomWords),
+		}
+		result = append(result, today)
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"data": result,
+	})
+}
+func getWriteFromMemory(c *gin.Context) {
 	words := []models.LearnRecord{}
 	writeFromMemorys := []writeFromMemory{}
-	DB.Order("id desc").Preload("Word").Where("review_time > ?", midnightTimestamp).Find(&words)
+	todayStart := time.Now().Truncate(24 * time.Hour)
+	todayEnd := todayStart.Add(24*time.Hour - 1*time.Second)
+	DB.Order("id desc").
+		Preload("Word").
+		Where("created_at BETWEEN ? AND ?", todayStart.Format("2006-01-02 15:04:05"), todayEnd.Format("2006-01-02 15:04:05")).
+		Find(&words)
 	for _, word := range words {
 		writeFromMemorys = append(writeFromMemorys, writeFromMemory{
 			Word:       word.Word.Word,
@@ -77,6 +199,7 @@ func getWriteFromMemory(c *gin.Context) {
 			ErrorCount: 0,
 			Rome:       word.Word.Rome,
 			Voice:      word.Word.Voice,
+			Done:       false,
 		})
 	}
 	c.JSON(http.StatusOK, gin.H{
