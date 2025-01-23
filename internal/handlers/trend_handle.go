@@ -20,6 +20,11 @@ type userInfo struct {
 	Nickname string `json:"nickname"`
 	Role     string `json:"role"`
 }
+
+func (userInfo) TableName() string {
+	return "users"
+}
+
 type trendResp struct {
 	Content   string    `json:"content"`
 	Browse    int       `json:"browse"`
