@@ -27,11 +27,11 @@ type Detail struct {
 type Jadict struct {
 	gorm.Model
 	ID     uint     `json:"id"`
-	Word   string   `json:"word"`
+	Word   string   `json:"word" gorm:"index"`
 	Tone   string   `json:"tone"`
 	Rome   string   `json:"rome"`
 	Voice  string   `json:"voice"`
-	Kana   string   `json:"kana"`
+	Kana   string   `json:"kana" gorm:"index"`
 	Detail []Detail `json:"detail" gorm:"serializer:json"`
 }
 

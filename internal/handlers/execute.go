@@ -31,9 +31,57 @@ func Execute(router *gin.Engine) {
 	Commenthandler.CommentRoutes(router)
 	Articlehandler := &ArticleHandler{}
 	Articlehandler.ArticleRoutes(router)
+	Mybookshandler := &MybooksHandler{}
+	Mybookshandler.MybooksRoutes(router)
 	router.GET("/config", middleware.User(), getUserConfig)
 	router.POST("/config", middleware.User(), setUserConfig)
+	router.POST("/feedback", middleware.User(), feedback)
 	router.GET("/verbtrans/:word", verbTrans)
+	router.GET("/grammar", getGrammarList)
+	router.GET("/grammar/:id", getGrammarInfo)
+}
+func feedback(c *gin.Context) {
+	var Req struct {
+		Content string `json:"content"  binding:"required"`
+		Type    string `json:"type"  binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&Req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"err": err.Error()})
+		return
+	}
+	UserId, _ := c.Get("UserId")
+	feedback := models.Feedback{
+		Content: Req.Content,
+		Type:    Req.Type,
+		UserID:  UserId.(uint),
+	}
+	DB.Create(&feedback)
+	c.JSON(http.StatusOK, gin.H{
+		"msg": "Submitted successfully",
+	})
+}
+
+type GrammarRes struct {
+	Grammar string           `json:"grammar"`
+	Id      uint             `json:"id"`
+	Level   string           `json:"level"`
+	Example []models.Example `json:"example" gorm:"serializer:json"`
+}
+
+func getGrammarInfo(c *gin.Context) {
+	id := c.Param("id")
+	result := models.Grammar{}
+	DB.Find(&result, id)
+	c.JSON(http.StatusOK, gin.H{
+		"data": result,
+	})
+}
+func getGrammarList(c *gin.Context) {
+	result := make([]GrammarRes, 0)
+	DB.Model(&models.Grammar{}).Find(&result)
+	c.JSON(http.StatusOK, gin.H{
+		"data": result,
+	})
 }
 func verbTrans(c *gin.Context) {
 	word := c.Param("word")

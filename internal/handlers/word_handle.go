@@ -602,10 +602,10 @@ func (h *WordHandler) jcSearch(c *gin.Context) {
 		return
 	}
 	val := c.Param("val")
-	searchTerm := fmt.Sprintf("%%%s%%", val)
+	searchTerm := fmt.Sprintf("'%s*'", val)
 	var total int64
-	DB.Model(models.Jadict{}).Select("word", "kana", "detail", "id", "deleted_at").Where("word LIKE ? OR kana LIKE ?", searchTerm, searchTerm).Order("LENGTH(word) ASC").Limit(size).Offset(size * (page - 1)).Find(&Word)
-	DB.Model(models.Jadict{}).Select("word", "kana", "detail", "id", "deleted_at").Where("word LIKE ? OR kana LIKE ?", searchTerm, searchTerm).Count(&total)
+	DB.Raw("SELECT word,kana,detail,id FROM jadict WHERE MATCH(word,kana) AGAINST(? IN BOOLEAN MODE) order by LENGTH(word) limit ? offset ?", searchTerm, size, size*(page-1)).Scan(&Word)
+	DB.Raw("SELECT word,kana,detail,id FROM jadict WHERE MATCH(word,kana) AGAINST(? IN BOOLEAN MODE)", searchTerm).Count(&total)
 	if total > 0 {
 		for _, v := range Word {
 			Res1.Meaning = getMeaning(v.Detail)
@@ -634,10 +634,10 @@ func (h *WordHandler) cjSearch(c *gin.Context) {
 	}
 	var Word []models.Chdict
 	val := c.Param("val")
-	searchTerm := fmt.Sprintf("%%%s%%", val)
+	searchTerm := fmt.Sprintf("'%s*'", val)
 	var total int64
-	DB.Model(models.Chdict{}).Select("ch", "id", "pinyin", "deleted_at").Where("ch LIKE ?", searchTerm).Limit(size).Offset(size * (page - 1)).Find(&Word)
-	DB.Model(models.Chdict{}).Select("ch", "id", "pinyin", "deleted_at").Where("ch LIKE ?", searchTerm).Count(&total)
+	DB.Raw("SELECT ch,id,pinyin FROM chdict WHERE MATCH(ch) AGAINST(? IN BOOLEAN MODE) order by LENGTH(ch) limit ? offset ?", searchTerm, size, size*(page-1)).Scan(&Word)
+	DB.Raw("SELECT ch,id,pinyin FROM chdict WHERE MATCH(ch) AGAINST(? IN BOOLEAN MODE)", searchTerm).Count(&total)
 	c.JSON(http.StatusOK, gin.H{
 		"msg":   "Successfully obtained",
 		"data":  Word,
