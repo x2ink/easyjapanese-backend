@@ -4,7 +4,9 @@ import (
 	. "easyjapanese/db"
 	"easyjapanese/internal/middleware"
 	"easyjapanese/internal/models"
+	"errors"
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 	"net/http"
 	"strconv"
 )
@@ -16,8 +18,26 @@ func (h *MybooksHandler) MybooksRoutes(router *gin.Engine) {
 	v1.POST("", h.add)
 	v1.GET("", h.getList)
 	v1.POST("/add", h.addword)
+	v1.POST("/set/:id", h.setbook)
 	v1.GET("/list/:id/:page/:size", h.getWordList)
-	v1.POST("/del/:id", h.delword)
+	v1.POST("/del/word/:wordid/:bookid", h.delword)
+	v1.POST("/del/book/:id", h.delbook)
+}
+func (h *MybooksHandler) setbook(c *gin.Context) {
+	id, _ := strconv.Atoi(c.Param("id"))
+	UserId, _ := c.Get("UserId")
+	var Req struct {
+		Name     string `json:"name" binding:"required"`
+		Describe string `json:"describe" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&Req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"err": err.Error()})
+		return
+	}
+	DB.Model(&models.MyBooks{}).Where("user_id = ? and id = ?", UserId, id).Updates(map[string]interface{}{"name": Req.Name, "describe": Req.Describe})
+	c.JSON(http.StatusOK, gin.H{
+		"msg": "Updated successfully",
+	})
 }
 func (h *MybooksHandler) getWordList(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
@@ -36,7 +56,7 @@ func (h *MybooksHandler) getWordList(c *gin.Context) {
 	words := []models.MybooksWordRelation{}
 	var total int64
 	DB.Preload("Word").Where("book_id = ?", id).Limit(size).Offset(size * (page - 1)).Find(&words)
-	DB.Model(models.WordBookRelation{}).Where("book_id = ?", id).Count(&total)
+	DB.Model(models.MybooksWordRelation{}).Where("book_id = ?", id).Count(&total)
 	if total > 0 {
 		for _, v := range words {
 			Res1.Meaning = getMeaning(v.Word.Detail)
@@ -51,9 +71,20 @@ func (h *MybooksHandler) getWordList(c *gin.Context) {
 		"total": total,
 	})
 }
-func (h *MybooksHandler) delword(c *gin.Context) {
+func (h *MybooksHandler) delbook(c *gin.Context) {
+	UserId, _ := c.Get("UserId")
 	id, _ := strconv.Atoi(c.Param("id"))
-	DB.Delete(&models.MybooksWordRelation{}, id)
+	DB.Where("user_id = ? and id = ?", UserId, id).Delete(&models.MyBooks{})
+	DB.Where("book_id = ?", id).Delete(&models.MybooksWordRelation{})
+	c.JSON(http.StatusOK, gin.H{
+		"msg": "Deleted successfully",
+	})
+}
+func (h *MybooksHandler) delword(c *gin.Context) {
+	UserId, _ := c.Get("UserId")
+	wordid, _ := strconv.Atoi(c.Param("wordid"))
+	bookid, _ := strconv.Atoi(c.Param("bookid"))
+	DB.Debug().Where("user_id = ? and word_id = ? and book_id = ?", UserId, wordid, bookid).Delete(&models.MybooksWordRelation{})
 	c.JSON(http.StatusOK, gin.H{
 		"msg": "Deleted successfully",
 	})
@@ -63,17 +94,26 @@ func (h *MybooksHandler) addword(c *gin.Context) {
 		WordId uint `json:"word_id" binding:"required"`
 		BookId uint `json:"book_id" binding:"required"`
 	}
+	UserId, _ := c.Get("UserId")
 	if err := c.ShouldBindJSON(&Req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"err": err.Error()})
 		return
 	}
-	DB.Create(&models.MybooksWordRelation{
-		WordId: Req.WordId,
-		BookId: Req.BookId,
-	})
-	c.JSON(http.StatusOK, gin.H{
-		"msg": "Submitted successfully",
-	})
+	err := DB.Where("word_id = ? AND book_id = ?", Req.WordId, Req.BookId).First(&models.MybooksWordRelation{}).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		DB.Create(&models.MybooksWordRelation{
+			WordId: Req.WordId,
+			BookId: Req.BookId,
+			UserId: UserId.(uint),
+		})
+		c.JSON(http.StatusOK, gin.H{
+			"msg": "Submitted successfully",
+		})
+	} else {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"msg": "The word is already in the vocabulary",
+		})
+	}
 }
 func (h *MybooksHandler) add(c *gin.Context) {
 	var Req struct {
@@ -113,7 +153,7 @@ type MybooksRes struct {
 func (h *MybooksHandler) getList(c *gin.Context) {
 	UserId, _ := c.Get("UserId")
 	var books []MybooksRes
-	DB.Model(&models.MyBooks{}).Where("user_id = ?", UserId).Find(&books)
+	DB.Order("id desc").Model(&models.MyBooks{}).Where("user_id = ?", UserId).Find(&books)
 	c.JSON(http.StatusOK, gin.H{
 		"msg":  "Successfully obtained",
 		"data": books,

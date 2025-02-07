@@ -288,63 +288,48 @@ type todayWordRes struct {
 }
 
 func extractKanaFromEnd(input string) string {
-	hasKanji := regexp.MustCompile(`[一-龯]`).FindString(input)
-	if hasKanji == "" {
-		return ""
-	}
-	re := regexp.MustCompile(`[ぁ-んァ-ンー]+$`)
+	re := regexp.MustCompile(`[ぁ-ゖァ-ヶー]+$`)
 	matches := re.FindString(input)
-	if matches != "" {
-		return matches
-	}
-	return ""
+	return matches
 }
+
+func isPureKana(s string) bool {
+	re := regexp.MustCompile(`^[ぁ-ゖァ-ヶー]+$`)
+	return re.MatchString(s)
+}
+
 func getKanaOption(word string, kana string) []option {
-	runes := []rune(kana)
-	suffix := extractKanaFromEnd(word)
-	options := []option{}
-	if suffix != "" {
-		var jadicts []models.Jadict
-		DB.Select("kana").Where("kana LIKE ? AND kana != ? AND CHAR_LENGTH(kana)<7", fmt.Sprintf("%%%s", suffix), kana).Limit(3).Find(&jadicts)
-		notin := []string{}
-		for _, jadict := range jadicts {
-			options = append(options, option{
-				Text:   retainKana(jadict.Kana),
-				Answer: false,
-			})
-			notin = append(notin, jadict.Kana)
-		}
-		options = append(options, option{
-			Text:   retainKana(kana),
-			Answer: true,
-		})
-		notin = append(notin, kana)
-		if len(options) < 4 {
-			var randoms []models.Jadict
-			DB.Select("kana").Where("kana NOT IN ? AND CHAR_LENGTH(kana)<7", notin).Limit(4 - len(options)).Find(&randoms)
-			for _, random := range randoms {
-				options = append(options, option{
-					Text:   retainKana(random.Kana),
-					Answer: false,
-				})
-			}
-		}
+	options := make([]option, 0)
+	if word == kana {
+		return options
+	}
+	jadicts := make([]models.Jadict, 0)
+	if isPureKana(word) {
+		DB.Preload("Word").Where("LENGTH(kana) <= ?", 7).Where("kana not in ? and id >= (SELECT FLOOR(RAND() * (SELECT MAX(id) FROM jadict)))", kana).Limit(3).Find(&jadicts)
 	} else {
-		if word != kana {
-			var randoms2 []models.Jadict
-			DB.Select("kana").Where("kana LIKE ? AND CHAR_LENGTH(kana)<7", fmt.Sprintf("%s%%", string(runes[:2]))).Limit(3).Find(&randoms2)
-			for _, random := range randoms2 {
-				options = append(options, option{
-					Text:   retainKana(random.Kana),
-					Answer: false,
-				})
-			}
-			options = append(options, option{
-				Text:   retainKana(kana),
-				Answer: true,
-			})
+		suffix := extractKanaFromEnd(word)
+		if suffix == "" {
+			DB.Where("LENGTH(kana) <= ?", 7).Where("kana != ? and id >= (SELECT FLOOR(RAND() * (SELECT MAX(id) FROM jadict)))", kana).Limit(3).Find(&jadicts)
+		} else {
+			searchTerm := fmt.Sprintf("%%%s", suffix)
+			DB.Raw("select * from jadict where kana NOT LIKE ? and kana LIKE ? limit 3", kana, searchTerm).Scan(&jadicts)
 		}
 	}
+	if len(jadicts) < 3 {
+		random := make([]models.Jadict, 0)
+		DB.Where("kana != ? and id >= (SELECT FLOOR(RAND() * (SELECT MAX(id) FROM jadict)))", kana).Limit(3 - len(jadicts)).Find(&random)
+		jadicts = append(jadicts, random...)
+	}
+	for _, jadict := range jadicts {
+		options = append(options, option{
+			Text:   retainKana(jadict.Kana),
+			Answer: false,
+		})
+	}
+	options = append(options, option{
+		Text:   retainKana(kana),
+		Answer: true,
+	})
 	return options
 }
 func getRandomElements(slice []models.WordBookRelation, n int) []models.WordBookRelation {
@@ -410,24 +395,24 @@ func getVoiceOption(word models.Jadict, randomWords []models.WordBookRelation) [
 }
 func (h *WordHandler) getTodayWord(c *gin.Context) {
 	UserId, _ := c.Get("UserId")
+	//获取用户配置
 	var config models.UserConfig
 	DB.First(&config, "user_id = ?", UserId)
-	wordbooks := []models.WordBookRelation{}
-	result := []todayWordRes{}
-	learnedWordIDs := []int{}
-	DB.Model(&models.LearnRecord{}).Where("user_id = ?", UserId).Pluck("word_id", &learnedWordIDs)
-	query := DB.Debug().Order("id desc").Preload("Word").Where("book_id = ?", config.BookID)
-	if len(learnedWordIDs) > 0 {
-		query = query.Where("word_id NOT IN ?", learnedWordIDs)
-	}
-	query.Limit(config.LearnGroup).Offset(1).Find(&wordbooks)
-	//获取随机单词
-	notin := []uint{}
+	wordbooks := make([]models.WordBookRelation, 0)
+	result := make([]todayWordRes, 0)
+	DB.Joins("LEFT JOIN learn_record lr ON lr.word_id = word_book_relation.word_id").
+		Where("lr.word_id IS NULL AND word_book_relation.book_id = ?", config.BookID).
+		Order("word_book_relation.id DESC").
+		Limit(config.LearnGroup).
+		Preload("Word").
+		Find(&wordbooks)
+	//获取随机单词充当选项
+	notin := make([]uint, 0)
 	for _, word := range wordbooks {
 		notin = append(notin, word.WordId)
 	}
-	randomWords := []models.WordBookRelation{}
-	DB.Order("RAND()").Preload("Word").Where("id NOT IN ?", notin).Limit(config.LearnGroup * 40).Find(&randomWords)
+	randomWords := make([]models.WordBookRelation, 0)
+	DB.Preload("Word").Where("id not in ? and id >= (SELECT FLOOR(RAND() * (SELECT MAX(id) FROM word_book_relation)))", notin).Limit(config.LearnGroup * 40).Find(&randomWords)
 	for _, word := range wordbooks {
 		var progress []bool
 		if word.Word.Kana == word.Word.Word {
@@ -559,7 +544,7 @@ func (h *WordHandler) cjInfo(c *gin.Context) {
 	res.Pinyin = Word.Pinyin
 	var JaWords []models.Jadict
 	if len(Word.Ja) > 0 {
-		DB.Select("detail", "id", "kana", "word").Model(&models.Jadict{}).Where("word IN ?", Word.Ja).Find(&JaWords)
+		DB.Debug().Select("detail", "id", "kana", "word").Model(&models.Jadict{}).Where("word IN ?", Word.Ja).Find(&JaWords)
 	}
 	var Res1 Res
 	for _, v1 := range JaWords {
