@@ -305,14 +305,14 @@ func getKanaOption(word string, kana string) []option {
 	}
 	jadicts := make([]models.Jadict, 0)
 	if isPureKana(word) {
-		DB.Preload("Word").Where("LENGTH(kana) <= ?", 7).Where("kana not in ? and id >= (SELECT FLOOR(RAND() * (SELECT MAX(id) FROM jadict)))", kana).Limit(3).Find(&jadicts)
+		DB.Preload("Word").Where("LENGTH(kana) <= ?", 7).Where("kana != ? and kana!=word and id >= (SELECT FLOOR(RAND() * (SELECT MAX(id) FROM jadict)))", kana).Limit(3).Find(&jadicts)
 	} else {
 		suffix := extractKanaFromEnd(word)
 		if suffix == "" {
-			DB.Where("LENGTH(kana) <= ?", 7).Where("kana != ? and id >= (SELECT FLOOR(RAND() * (SELECT MAX(id) FROM jadict)))", kana).Limit(3).Find(&jadicts)
+			DB.Where("LENGTH(kana) <= ?", 7).Where("kana != ? and kana!=word and id >= (SELECT FLOOR(RAND() * (SELECT MAX(id) FROM jadict)))", kana).Limit(3).Find(&jadicts)
 		} else {
 			searchTerm := fmt.Sprintf("%%%s", suffix)
-			DB.Raw("select * from jadict where kana NOT LIKE ? and kana LIKE ? limit 3", kana, searchTerm).Scan(&jadicts)
+			DB.Raw("select * from jadict where kana != ? and kana!=word and kana LIKE ? limit 3", kana, searchTerm).Scan(&jadicts)
 		}
 	}
 	if len(jadicts) < 3 {
