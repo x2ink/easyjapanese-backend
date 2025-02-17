@@ -9,6 +9,7 @@ type Chdict struct {
 	ID     uint     `json:"id"`
 	Ch     string   `json:"ch"`
 	Pinyin string   `json:"pinyin"`
+	Browse int      `json:"browse"`
 	Ja     []string `json:"ja" gorm:"serializer:json"`
 }
 

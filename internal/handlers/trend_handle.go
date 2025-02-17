@@ -76,10 +76,20 @@ func (h *TrendHandler) like(c *gin.Context) {
 			TargetID: uint(targetId),
 			UserID:   UserId.(uint),
 		})
+		var Trend models.Trend
+		DB.First(&Trend, uint(targetId))
+		DB.Create(&models.LikeRecord{
+			Content:  TruncateString(Trend.Content, 100),
+			TargetID: uint(targetId),
+			Target:   "trend",
+			ToID:     Trend.UserID,
+			FromID:   UserId.(uint),
+		})
 		c.JSON(http.StatusOK, gin.H{"msg": "like"})
 		return
 	} else {
 		DB.Unscoped().Delete(&like)
+		DB.Unscoped().Delete(&models.LikeRecord{}, "target = ? and target_id = ?", "trend", uint(targetId))
 		c.JSON(http.StatusOK, gin.H{"msg": "dislike"})
 		return
 	}
@@ -132,7 +142,7 @@ func (h *TrendHandler) getList(c *gin.Context) {
 		return
 	}
 	var total int64
-	trends := []models.Trend{}
+	trends := make([]models.Trend, 0)
 	if section == 0 {
 		DB.Order("id desc").Preload("User.Role").Preload("Images").Preload("Like").Limit(size).Offset(size * (page - 1)).Find(&trends)
 		DB.Model(&models.Trend{}).Count(&total)

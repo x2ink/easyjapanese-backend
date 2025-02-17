@@ -42,7 +42,7 @@ func (h *MybooksHandler) setbook(c *gin.Context) {
 func (h *MybooksHandler) getWordList(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
 	var Res1 Res
-	var Res2 []Res
+	Res2 := make([]Res, 0)
 	page, err := strconv.Atoi(c.Param("page"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"err": "The page format is incorrect"})
@@ -53,7 +53,7 @@ func (h *MybooksHandler) getWordList(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"err": "The size format is incorrect"})
 		return
 	}
-	words := []models.MybooksWordRelation{}
+	words := make([]models.MybooksWordRelation, 0)
 	var total int64
 	DB.Preload("Word").Where("book_id = ?", id).Limit(size).Offset(size * (page - 1)).Find(&words)
 	DB.Model(models.MybooksWordRelation{}).Where("book_id = ?", id).Count(&total)

@@ -30,6 +30,7 @@ type Jadict struct {
 	Word   string   `json:"word" gorm:"index"`
 	Tone   string   `json:"tone"`
 	Rome   string   `json:"rome"`
+	Browse int      `json:"browse"`
 	Voice  string   `json:"voice"`
 	Kana   string   `json:"kana" gorm:"index"`
 	Detail []Detail `json:"detail" gorm:"serializer:json"`

@@ -6,6 +6,7 @@ type Wordbook struct {
 	Category string             `json:"category"`
 	Describe string             `json:"describe"`
 	Icon     string             `json:"icon"`
+	Tag      string             `json:"tag"`
 	Words    []WordBookRelation `gorm:"foreignKey:BookId" json:"words"`
 }
 

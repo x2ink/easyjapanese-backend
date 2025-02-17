@@ -50,6 +50,7 @@ func (h *WordHandler) WordRoutes(router *gin.Engine) {
 		learn.GET("review", h.getReview)
 		learn.GET("info", h.getInfo)
 	}
+	router.GET("recommend", h.recommendWord)
 }
 func getErrorCount(words []struct {
 	Id         uint `json:"id"`
@@ -520,6 +521,8 @@ type Res struct {
 	Kana    string   `json:"kana"`
 	ID      uint     `json:"id"`
 	Meaning []string `json:"meaning"`
+	Level   []string `json:"level"`
+	Browse  int      `json:"browse"`
 }
 type ChRes struct {
 	Ch     string `json:"ch"`
@@ -542,6 +545,8 @@ func (h *WordHandler) cjInfo(c *gin.Context) {
 	}
 	res.Ch = Word.Ch
 	res.Pinyin = Word.Pinyin
+	Word.Browse += 1
+	DB.Save(&Word)
 	var JaWords []models.Jadict
 	if len(Word.Ja) > 0 {
 		DB.Debug().Select("detail", "id", "kana", "word").Model(&models.Jadict{}).Where("word IN ?", Word.Ja).Find(&JaWords)
@@ -566,7 +571,15 @@ func (h *WordHandler) jcInfo(c *gin.Context) {
 		return
 	}
 	var Word models.Jadict
-	DB.Model(models.Jadict{}).Omit("created_at", "updated_at").First(&Word, id)
+	result := DB.Model(models.Jadict{}).Omit("created_at", "updated_at").First(&Word, id).Error
+	if errors.Is(result, gorm.ErrRecordNotFound) {
+		c.JSON(http.StatusNotFound, gin.H{
+			"msg": "Word does not exist",
+		})
+		return
+	}
+	Word.Browse += 1
+	DB.Save(&Word)
 	c.JSON(http.StatusOK, gin.H{
 		"msg":  "Successfully obtained",
 		"data": Word,
@@ -673,5 +686,26 @@ func (h *WordHandler) addLearnRecord(c *gin.Context) {
 	DB.Create(&learnRecord)
 	c.JSON(http.StatusOK, gin.H{
 		"msg": "Record successful",
+	})
+}
+
+// 推荐单词
+func (h *WordHandler) recommendWord(c *gin.Context) {
+	randomWords := make([]models.WordBookRelation, 0)
+	var Res2 []Res
+	DB.Preload("Word").Preload("Book").Where("id >= (SELECT FLOOR(RAND() * (SELECT MAX(id) FROM word_book_relation)))").Limit(20).Find(&randomWords)
+	for _, v := range randomWords {
+		Res1 := Res{}
+		Res1.Meaning = getMeaning(v.Word.Detail)
+		Res1.ID = v.Word.ID
+		Res1.Kana = v.Word.Kana
+		Res1.Word = v.Word.Word
+		Res1.Browse = v.Word.Browse
+		Res1.Level = append(Res1.Level, v.Book.Tag)
+		Res2 = append(Res2, Res1)
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"data": Res2,
+		"msg":  "Successfully obtained",
 	})
 }

@@ -64,7 +64,7 @@ func (h *CommentHandler) getChild(c *gin.Context) {
 			Images:    images,
 			CreatedAt: comment.CreatedAt,
 			LikeCount: len(comment.Like),
-			HasLike:   hasLike(comment.Like, UserId.(uint)),
+			HasLike:   HasLike(comment.Like, UserId.(uint)),
 		}
 		listres = append(listres, res)
 	}
@@ -84,10 +84,20 @@ func (h *CommentHandler) like(c *gin.Context) {
 			TargetID: uint(targetId),
 			UserID:   UserId.(uint),
 		})
+		var Comment models.Comment
+		DB.First(&Comment, uint(targetId))
+		DB.Create(&models.LikeRecord{
+			Content:  TruncateString(Comment.Content, 100),
+			TargetID: uint(targetId),
+			Target:   "comment",
+			ToID:     Comment.From,
+			FromID:   UserId.(uint),
+		})
 		c.JSON(http.StatusOK, gin.H{"msg": "like"})
 		return
 	} else {
 		DB.Unscoped().Delete(&like)
+		DB.Unscoped().Delete(&models.LikeRecord{}, "target = ? and target_id = ?", "comment", uint(targetId))
 		c.JSON(http.StatusOK, gin.H{"msg": "dislike"})
 		return
 	}
@@ -106,7 +116,7 @@ type listRes struct {
 	ChildCount int       `json:"child_count"`
 }
 
-func hasLike(likes []models.CommentLike, userId uint) bool {
+func HasLike(likes []models.CommentLike, userId uint) bool {
 	for _, like := range likes {
 		if like.UserID == userId {
 			return true
@@ -138,9 +148,9 @@ func (h *CommentHandler) getList(c *gin.Context) {
 	}).Model(&models.Comment{}).Where("target_id = ? AND target = ? AND parent_id is NULL", targetId, target).Limit(size).Offset(size * (page - 1)).Find(&comments)
 	var total int64
 	DB.Model(&models.Comment{}).Where("target_id = ? AND target = ? AND parent_id is NULL", targetId, target).Count(&total)
-	listres := []listRes{}
+	listres := make([]listRes, 0)
 	for _, comment := range comments {
-		children := []listRes{}
+		children := make([]listRes, 0)
 		for k, child := range comment.Children {
 			if k >= 10 {
 				break
@@ -165,7 +175,7 @@ func (h *CommentHandler) getList(c *gin.Context) {
 				CreatedAt: comment.CreatedAt,
 				Images:    childimage,
 				LikeCount: len(child.Like),
-				HasLike:   hasLike(child.Like, UserId.(uint)),
+				HasLike:   HasLike(child.Like, UserId.(uint)),
 			})
 		}
 		var images []string
@@ -190,7 +200,7 @@ func (h *CommentHandler) getList(c *gin.Context) {
 			CreatedAt: comment.CreatedAt,
 			Children:  children,
 			LikeCount: len(comment.Like),
-			HasLike:   hasLike(comment.Like, UserId.(uint)),
+			HasLike:   HasLike(comment.Like, UserId.(uint)),
 		}
 		listres = append(listres, res)
 	}
@@ -214,10 +224,17 @@ func (h *CommentHandler) add(c *gin.Context) {
 		return
 	}
 	var ParentID *int
+	content := ""
 	if Req.ParentID == 0 {
 		ParentID = nil
+		var trend models.Trend
+		DB.First(&trend, Req.TargetID)
+		content = trend.Content
 	} else {
 		ParentID = &Req.ParentID
+		var comment models.Comment
+		DB.First(&comment, ParentID)
+		content = comment.Content
 	}
 	comment := &models.Comment{
 		Content:  Req.Content,
@@ -228,6 +245,9 @@ func (h *CommentHandler) add(c *gin.Context) {
 		ParentID: ParentID,
 	}
 	DB.Create(&comment)
+	if uint(Req.To) == UserId.(uint) {
+		sendMessage(uint(Req.To), UserId.(uint), comment.ID, content)
+	}
 	for _, v := range Req.Images {
 		DB.Create(&models.CommentImage{TargetID: comment.ID, Url: v})
 	}
