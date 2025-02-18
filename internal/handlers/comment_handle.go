@@ -17,9 +17,84 @@ type CommentHandler struct{}
 func (h *CommentHandler) CommentRoutes(router *gin.Engine) {
 	v1 := router.Group("/comment").Use(middleware.User())
 	v1.POST("", h.add)
-	v1.GET("/:target/:target_id/:page/:size", h.getList)
+	v1.GET("/:target/:target_id/:page/:size/:sort", h.getList)
+	v1.POST("/getone", h.getOne)
+	v1.GET("/:target/:target_id/:page/:size/:sort/:hide_id", h.getList)
 	v1.POST("/like/:id", h.like)
-	v1.GET("/child/:parent_id/:page/:size", h.getChild)
+	v1.GET("/child/:parent_id/:page/:size/:sort", h.getChild)
+}
+func (h *CommentHandler) getOne(c *gin.Context) {
+	var Req struct {
+		ParentId int `json:"parent_id" binding:"required"`
+		ChildId  int `json:"child_id"`
+	}
+	if err := c.ShouldBindJSON(&Req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"err": err.Error()})
+		return
+	}
+	UserId, _ := c.Get("UserId")
+	var comment models.Comment
+	DB.Preload("ToUser").Preload("Images").Preload("FromUser").Preload("Like").Preload("Children", func(db *gorm.DB) *gorm.DB {
+		return db.Order("likenum desc,id desc").Preload("ToUser").Preload("FromUser").Preload("Images").Preload("Like").Where("id not in ?", []int{Req.ChildId})
+	}).Model(&models.Comment{}).First(&comment, Req.ParentId)
+	var Child models.Comment
+	DB.Preload("ToUser").Preload("FromUser").Preload("Images").Preload("Like").First(&Child, Req.ChildId)
+	children := make([]listRes, 0)
+	if Child.ID != 0 {
+		comment.Children = append([]models.Comment{Child}, comment.Children...)
+	}
+	for k, child := range comment.Children {
+		if k >= 10 {
+			break
+		}
+		var childimage []string
+		for _, image := range child.Images {
+			childimage = append(childimage, image.Url)
+		}
+		children = append(children, listRes{
+			Id:      child.ID,
+			Content: child.Content,
+			ToUser: userInfo{
+				Id:       child.ToUser.ID,
+				Avatar:   child.ToUser.Avatar,
+				Nickname: child.ToUser.Nickname,
+			},
+			FromUser: userInfo{
+				Id:       child.FromUser.ID,
+				Avatar:   child.FromUser.Avatar,
+				Nickname: child.FromUser.Nickname,
+			},
+			CreatedAt: child.CreatedAt,
+			Images:    childimage,
+			LikeCount: child.Likenum,
+			HasLike:   HasLike(child.Like, UserId.(uint)),
+		})
+	}
+	var images []string
+	for _, image := range comment.Images {
+		images = append(images, image.Url)
+	}
+	res := listRes{
+		ChildCount: len(comment.Children),
+		Id:         comment.ID,
+		Content:    comment.Content,
+		ToUser: userInfo{
+			Id:       comment.ToUser.ID,
+			Avatar:   comment.ToUser.Avatar,
+			Nickname: comment.ToUser.Nickname,
+		},
+		FromUser: userInfo{
+			Id:       comment.FromUser.ID,
+			Avatar:   comment.FromUser.Avatar,
+			Nickname: comment.FromUser.Nickname,
+		},
+		Images:    images,
+		CreatedAt: comment.CreatedAt,
+		Children:  children,
+		LikeCount: comment.Likenum,
+		HasLike:   HasLike(comment.Like, UserId.(uint)),
+	}
+	c.JSON(http.StatusOK, gin.H{"data": res})
 }
 func (h *CommentHandler) getChild(c *gin.Context) {
 	parentId, err := strconv.ParseUint(c.Param("parent_id"), 10, 32)
@@ -39,7 +114,12 @@ func (h *CommentHandler) getChild(c *gin.Context) {
 		return
 	}
 	var comments []models.Comment
-	DB.Debug().Order("id desc").Preload("ToUser").Preload("Images").Preload("Like").Preload("FromUser").Model(&models.Comment{}).Where("parent_id = ?", parentId).Limit(size).Offset(size * (page - 1)).Find(&comments)
+	sort := c.Param("sort")
+	if sort == "time" {
+		DB.Order("id desc").Preload("ToUser").Preload("Images").Preload("FromUser").Preload("Like").Model(&models.Comment{}).Where("parent_id = ?", parentId).Limit(size).Offset(size * (page - 1)).Find(&comments)
+	} else {
+		DB.Order("likenum desc,id desc").Preload("ToUser").Preload("Images").Preload("FromUser").Preload("Like").Model(&models.Comment{}).Where("parent_id = ?", parentId).Limit(size).Offset(size * (page - 1)).Find(&comments)
+	}
 	var total int64
 	DB.Model(&models.Comment{}).Where("parent_id = ?", parentId).Count(&total)
 	var listres []listRes
@@ -63,7 +143,7 @@ func (h *CommentHandler) getChild(c *gin.Context) {
 			},
 			Images:    images,
 			CreatedAt: comment.CreatedAt,
-			LikeCount: len(comment.Like),
+			LikeCount: comment.Likenum,
 			HasLike:   HasLike(comment.Like, UserId.(uint)),
 		}
 		listres = append(listres, res)
@@ -79,24 +159,30 @@ func (h *CommentHandler) like(c *gin.Context) {
 	UserId, _ := c.Get("UserId")
 	var like models.CommentLike
 	result := DB.Where("target_id = ? AND user_id = ?", uint(targetId), UserId).First(&like).Error
+	var Comment models.Comment
+	DB.First(&Comment, uint(targetId))
 	if errors.Is(result, gorm.ErrRecordNotFound) {
 		DB.Create(&models.CommentLike{
 			TargetID: uint(targetId),
 			UserID:   UserId.(uint),
 		})
-		var Comment models.Comment
-		DB.First(&Comment, uint(targetId))
 		DB.Create(&models.LikeRecord{
+			TargetID: Comment.TargetID,
 			Content:  TruncateString(Comment.Content, 100),
-			TargetID: uint(targetId),
-			Target:   "comment",
+			ChildID:  int(targetId),
+			ParentID: Comment.ParentID,
+			Target:   "trend",
 			ToID:     Comment.From,
 			FromID:   UserId.(uint),
 		})
+		Comment.Likenum = Comment.Likenum + 1
+		DB.Save(&Comment)
 		c.JSON(http.StatusOK, gin.H{"msg": "like"})
 		return
 	} else {
 		DB.Unscoped().Delete(&like)
+		Comment.Likenum = Comment.Likenum - 1
+		DB.Save(&Comment)
 		DB.Unscoped().Delete(&models.LikeRecord{}, "target = ? and target_id = ?", "comment", uint(targetId))
 		c.JSON(http.StatusOK, gin.H{"msg": "dislike"})
 		return
@@ -125,8 +211,13 @@ func HasLike(likes []models.CommentLike, userId uint) bool {
 	return false
 }
 func (h *CommentHandler) getList(c *gin.Context) {
-	page, err := strconv.Atoi(c.Param("page"))
+	hideIds := make([]int, 0)
+	hideId, err := strconv.Atoi(c.Param("hide_id"))
+	if err == nil {
+		hideIds = append(hideIds, hideId)
+	}
 	UserId, _ := c.Get("UserId")
+	page, err := strconv.Atoi(c.Param("page"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"err": "The page format is incorrect"})
 		return
@@ -143,9 +234,16 @@ func (h *CommentHandler) getList(c *gin.Context) {
 		return
 	}
 	var comments []models.Comment
-	DB.Order("id desc").Preload("ToUser").Preload("Images").Preload("Like").Preload("FromUser").Preload("Children", func(db *gorm.DB) *gorm.DB {
-		return db.Order("id desc").Preload("ToUser").Preload("FromUser").Preload("Images").Preload("Like")
-	}).Model(&models.Comment{}).Where("target_id = ? AND target = ? AND parent_id is NULL", targetId, target).Limit(size).Offset(size * (page - 1)).Find(&comments)
+	sort := c.Param("sort")
+	if sort == "time" {
+		DB.Order("id desc").Preload("ToUser").Preload("Images").Preload("FromUser").Preload("Like").Preload("Children", func(db *gorm.DB) *gorm.DB {
+			return db.Order("id desc").Preload("ToUser").Preload("FromUser").Preload("Images").Preload("Like")
+		}).Model(&models.Comment{}).Where("target_id = ? AND target = ? AND parent_id is NULL AND id not in ?", targetId, target, hideIds).Limit(size).Offset(size * (page - 1)).Find(&comments)
+	} else {
+		DB.Order("likenum desc,id desc").Preload("ToUser").Preload("Images").Preload("FromUser").Preload("Like").Preload("Children", func(db *gorm.DB) *gorm.DB {
+			return db.Order("likenum desc,id desc").Preload("ToUser").Preload("FromUser").Preload("Images").Preload("Like")
+		}).Model(&models.Comment{}).Where("target_id = ? AND target = ? AND parent_id is NULL AND id not in ?", targetId, target, hideIds).Limit(size).Offset(size * (page - 1)).Find(&comments)
+	}
 	var total int64
 	DB.Model(&models.Comment{}).Where("target_id = ? AND target = ? AND parent_id is NULL", targetId, target).Count(&total)
 	listres := make([]listRes, 0)
@@ -172,9 +270,9 @@ func (h *CommentHandler) getList(c *gin.Context) {
 					Avatar:   child.FromUser.Avatar,
 					Nickname: child.FromUser.Nickname,
 				},
-				CreatedAt: comment.CreatedAt,
+				CreatedAt: child.CreatedAt,
 				Images:    childimage,
-				LikeCount: len(child.Like),
+				LikeCount: child.Likenum,
 				HasLike:   HasLike(child.Like, UserId.(uint)),
 			})
 		}
@@ -199,7 +297,7 @@ func (h *CommentHandler) getList(c *gin.Context) {
 			Images:    images,
 			CreatedAt: comment.CreatedAt,
 			Children:  children,
-			LikeCount: len(comment.Like),
+			LikeCount: comment.Likenum,
 			HasLike:   HasLike(comment.Like, UserId.(uint)),
 		}
 		listres = append(listres, res)
@@ -245,8 +343,8 @@ func (h *CommentHandler) add(c *gin.Context) {
 		ParentID: ParentID,
 	}
 	DB.Create(&comment)
-	if uint(Req.To) == UserId.(uint) {
-		sendMessage(uint(Req.To), UserId.(uint), comment.ID, content)
+	if uint(Req.To) != UserId.(uint) {
+		sendMessage(uint(Req.To), UserId.(uint), comment.ID, content, comment.Target, comment.TargetID)
 	}
 	for _, v := range Req.Images {
 		DB.Create(&models.CommentImage{TargetID: comment.ID, Url: v})

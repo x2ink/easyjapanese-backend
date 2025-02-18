@@ -5,7 +5,9 @@ import "time"
 type LikeRecord struct {
 	ID        uint      `json:"id"`
 	CreatedAt time.Time `json:"created_at"`
-	TargetID  uint      `gorm:"null" json:"target_id"`
+	ChildID   int       `gorm:"null" json:"child_id"`
+	ParentID  *int      `gorm:"null" json:"parent_id"`
+	TargetID  int       `gorm:"null" json:"target_id"`
 	Target    string    `gorm:"size:100;null" json:"target"`
 	FromID    uint      `gorm:"null" json:"from_id"`
 	ToID      uint      `gorm:"null" json:"to_id"`

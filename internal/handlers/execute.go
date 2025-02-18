@@ -63,7 +63,9 @@ func getUnread(c *gin.Context) {
 type LikeRecordRes struct {
 	ID        uint      `json:"id"`
 	CreatedAt time.Time `json:"created_at"`
-	TargetID  uint      `json:"target_id"`
+	ParentID  *int      `json:"parent_id"`
+	ChildID   int       `json:"child_id"`
+	TargetID  int       `json:"target_id"`
 	Target    string    `json:"target"`
 	FromID    uint      `json:"from_id"`
 	ToID      uint      `json:"to_id"`
@@ -101,7 +103,9 @@ func getLikeRecordList(c *gin.Context) {
 		likeRecordRes := LikeRecordRes{
 			ID:        item.ID,
 			CreatedAt: item.CreatedAt,
+			ChildID:   item.ChildID,
 			TargetID:  item.TargetID,
+			ParentID:  item.ParentID,
 			Target:    item.Target,
 			FromID:    item.FromID,
 			ToID:      item.ToID,

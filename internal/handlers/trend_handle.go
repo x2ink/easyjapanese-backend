@@ -25,17 +25,6 @@ func (userInfo) TableName() string {
 	return "users"
 }
 
-type trendResp struct {
-	Content   string    `json:"content"`
-	Browse    int       `json:"browse"`
-	Like      int       `json:"like"`
-	SectionId int       `json:"section_id"`
-	Images    []string  `json:"images"`
-	CreatedAt time.Time `json:"created_at"`
-	User      userInfo  `json:"user"`
-	Id        uint      `json:"id"`
-}
-
 func (h *TrendHandler) TrendRoutes(router *gin.Engine) {
 	v1 := router.Group("/trend").Use(middleware.User())
 	v1.POST("", h.addTrend)
@@ -71,43 +60,48 @@ func (h *TrendHandler) like(c *gin.Context) {
 	UserId, _ := c.Get("UserId")
 	var like models.TrendLike
 	result := DB.Where("target_id = ? AND user_id = ?", uint(targetId), UserId).First(&like).Error
+	var Trend models.Trend
+	DB.First(&Trend, uint(targetId))
 	if errors.Is(result, gorm.ErrRecordNotFound) {
 		DB.Create(&models.TrendLike{
 			TargetID: uint(targetId),
 			UserID:   UserId.(uint),
 		})
-		var Trend models.Trend
-		DB.First(&Trend, uint(targetId))
 		DB.Create(&models.LikeRecord{
 			Content:  TruncateString(Trend.Content, 100),
-			TargetID: uint(targetId),
+			TargetID: int(targetId),
 			Target:   "trend",
 			ToID:     Trend.UserID,
 			FromID:   UserId.(uint),
 		})
+		Trend.Likenum = Trend.Likenum + 1
+		DB.Save(&Trend)
 		c.JSON(http.StatusOK, gin.H{"msg": "like"})
 		return
 	} else {
 		DB.Unscoped().Delete(&like)
+		Trend.Likenum = Trend.Likenum - 1
+		DB.Save(&Trend)
 		DB.Unscoped().Delete(&models.LikeRecord{}, "target = ? and target_id = ?", "trend", uint(targetId))
 		c.JSON(http.StatusOK, gin.H{"msg": "dislike"})
 		return
 	}
 }
 
-func trendList(c *gin.Context, trends []models.Trend, total int64) {
-	searchRes := []trendResp{}
+func trendList(c *gin.Context, trends []TrendCount, total int64) {
+	searchRes := make([]trendResp, 0)
 	for _, trend := range trends {
-		images := []string{}
+		images := make([]string, 0)
 		for _, image := range trend.Images {
 			images = append(images, image.Url)
 		}
 		trendRes := trendResp{
+			Comment:   trend.Comment,
 			Id:        trend.ID,
 			Images:    images,
 			Content:   trend.Content,
 			Browse:    trend.Browse,
-			Like:      len(trend.Like),
+			Like:      trend.Likenum,
 			CreatedAt: trend.CreatedAt,
 			SectionId: trend.SectionID,
 			User: userInfo{
@@ -125,6 +119,23 @@ func trendList(c *gin.Context, trends []models.Trend, total int64) {
 		"total": total,
 	})
 }
+
+type trendResp struct {
+	Comment   int       `json:"comment"`
+	Content   string    `json:"content"`
+	Browse    int       `json:"browse"`
+	Like      int       `json:"like"`
+	SectionId int       `json:"section_id"`
+	Images    []string  `json:"images"`
+	CreatedAt time.Time `json:"created_at"`
+	User      userInfo  `json:"user"`
+	Id        uint      `json:"id"`
+}
+type TrendCount struct {
+	models.Trend
+	Comment int `json:"comment"`
+}
+
 func (h *TrendHandler) getList(c *gin.Context) {
 	page, err := strconv.Atoi(c.Param("page"))
 	if err != nil {
@@ -142,12 +153,12 @@ func (h *TrendHandler) getList(c *gin.Context) {
 		return
 	}
 	var total int64
-	trends := make([]models.Trend, 0)
+	trends := make([]TrendCount, 0)
 	if section == 0 {
-		DB.Order("id desc").Preload("User.Role").Preload("Images").Preload("Like").Limit(size).Offset(size * (page - 1)).Find(&trends)
+		DB.Preload("User.Role").Preload("Images").Order("id desc").Model(&models.Trend{}).Select("COUNT(comment.id) as comment,trend.*").Joins("left join comment on comment.target='trend' and comment.target_id=trend.id").Group("trend.id").Limit(size).Offset(size * (page - 1)).Find(&trends)
 		DB.Model(&models.Trend{}).Count(&total)
 	} else {
-		DB.Order("id desc").Preload("User.Role").Preload("Images").Preload("Like").Where("section_id = ?", section).Limit(size).Offset(size * (page - 1)).Find(&trends)
+		DB.Preload("User.Role").Preload("Images").Order("id desc").Model(&models.Trend{}).Select("COUNT(comment.id) as comment,trend.*").Joins("left join comment on comment.target='trend' and comment.target_id=trend.id").Where("section_id = ?", section).Group("trend.id").Limit(size).Offset(size * (page - 1)).Find(&trends)
 		DB.Model(&models.Trend{}).Where("section_id = ?", section).Count(&total)
 	}
 	trendList(c, trends, total)
@@ -166,8 +177,8 @@ func (h *TrendHandler) search(c *gin.Context) {
 	val := c.Param("val")
 	searchTerm := fmt.Sprintf("%%%s%%", val)
 	var total int64
-	trends := []models.Trend{}
-	DB.Preload("User.Role").Preload("Images").Preload("Like").Where("content LIKE ?", searchTerm).Limit(size).Offset(size * (page - 1)).Find(&trends)
+	trends := make([]TrendCount, 0)
+	DB.Preload("User.Role").Preload("Images").Order("id desc").Model(&models.Trend{}).Select("COUNT(comment.id) as comment,trend.*").Joins("left join comment on comment.target='trend' and comment.target_id=trend.id").Where("content LIKE ?", searchTerm).Group("trend.id").Limit(size).Offset(size * (page - 1)).Find(&trends)
 	DB.Model(&models.Trend{}).Where("title LIKE ? OR content LIKE ?", searchTerm, searchTerm).Count(&total)
 	trendList(c, trends, total)
 }

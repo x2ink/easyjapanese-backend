@@ -15,6 +15,7 @@ type Comment struct {
 	Content  string
 	ParentID *int      `json:"parent_id"`
 	Children []Comment `gorm:"foreignKey:ParentID" json:"children"`
+	Likenum  int       `gorm:"default:0" json:"likenum"`
 }
 
 func (Comment) TableName() string {

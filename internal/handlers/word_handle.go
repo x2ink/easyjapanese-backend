@@ -549,7 +549,7 @@ func (h *WordHandler) cjInfo(c *gin.Context) {
 	DB.Save(&Word)
 	var JaWords []models.Jadict
 	if len(Word.Ja) > 0 {
-		DB.Debug().Select("detail", "id", "kana", "word").Model(&models.Jadict{}).Where("word IN ?", Word.Ja).Find(&JaWords)
+		DB.Select("detail", "id", "kana", "word").Model(&models.Jadict{}).Where("word IN ?", Word.Ja).Find(&JaWords)
 	}
 	var Res1 Res
 	for _, v1 := range JaWords {
