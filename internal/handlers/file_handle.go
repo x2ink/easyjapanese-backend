@@ -27,7 +27,7 @@ func (h *FileHandler) upload(c *gin.Context) {
 		c.JSON(http.StatusBadGateway, gin.H{"err": err.Error()})
 		return
 	}
-	url := fmt.Sprintf("https://%s/file/%s", c.Request.Host, file.Filename)
+	url := fmt.Sprintf("http://%s/file/%s", c.Request.Host, file.Filename)
 	c.JSON(http.StatusOK, gin.H{"msg": "上传成功", "data": url})
 	return
 }

@@ -32,6 +32,7 @@ func (h *TrendHandler) TrendRoutes(router *gin.Engine) {
 	v1.GET("/:id", h.getInfo)
 	v1.GET("/search/:page/:size/:val", h.search)
 	v1.GET("/list/:page/:size/:section", h.getList)
+	v1.GET("/mylist/:page/:size", h.getMyList)
 	v1.POST("/like/:id", h.like)
 	v1.GET("/like/:id", h.getLike)
 }
@@ -130,12 +131,31 @@ type trendResp struct {
 	CreatedAt time.Time `json:"created_at"`
 	User      userInfo  `json:"user"`
 	Id        uint      `json:"id"`
+	My        bool      `json:"my"`
 }
 type TrendCount struct {
 	models.Trend
 	Comment int `json:"comment"`
 }
 
+func (h *TrendHandler) getMyList(c *gin.Context) {
+	UserId, _ := c.Get("UserId")
+	page, err := strconv.Atoi(c.Param("page"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"err": "The page format is incorrect"})
+		return
+	}
+	size, err := strconv.Atoi(c.Param("size"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"err": "The size format is incorrect"})
+		return
+	}
+	var total int64
+	trends := make([]TrendCount, 0)
+	DB.Debug().Preload("User.Role").Preload("Images").Order("id desc").Model(&models.Trend{}).Select("COUNT(comment.id) as comment,trend.*").Joins("left join comment on comment.target='trend' and comment.target_id=trend.id").Where("user_id = ?", UserId).Group("trend.id").Limit(size).Offset(size * (page - 1)).Find(&trends)
+	DB.Model(&models.Trend{}).Where("user_id = ?", UserId).Count(&total)
+	trendList(c, trends, total)
+}
 func (h *TrendHandler) getList(c *gin.Context) {
 	page, err := strconv.Atoi(c.Param("page"))
 	if err != nil {
@@ -208,11 +228,13 @@ func (h *TrendHandler) deleteTrend(c *gin.Context) {
 	trendId := c.Param("id")
 	DB.Delete(&models.Trend{}, trendId)
 	DB.Where("target = ? AND target_id = ?", "trend", trendId).Delete(&models.TrendImage{})
+	DB.Where("target = ? AND target_id = ?", "trend", trendId).Delete(&models.Comment{})
 	c.JSON(http.StatusOK, gin.H{"msg": "Deteled successfully"})
 }
 
 func (h *TrendHandler) getInfo(c *gin.Context) {
 	trendId := c.Param("id")
+	UserId, _ := c.Get("UserId")
 	parsedId, err := strconv.ParseUint(trendId, 10, 32)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid ID format"})
@@ -228,17 +250,19 @@ func (h *TrendHandler) getInfo(c *gin.Context) {
 	}
 	Trend.Browse += 1
 	DB.Save(&Trend)
-	images := []string{}
+	images := make([]string, 0)
 	for _, image := range Trend.Images {
 		images = append(images, image.Url)
 	}
 	trendResp := trendResp{
+		Id:        Trend.ID,
 		CreatedAt: Trend.CreatedAt,
 		Content:   Trend.Content,
 		Browse:    Trend.Browse,
 		Like:      len(Trend.Like),
 		SectionId: Trend.SectionID,
 		Images:    images,
+		My:        UserId.(uint) == Trend.UserID,
 		User: userInfo{
 			Id:       Trend.UserID,
 			Avatar:   Trend.User.Avatar,

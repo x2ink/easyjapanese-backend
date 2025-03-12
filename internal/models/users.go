@@ -10,8 +10,8 @@ type Users struct {
 	Nickname string `gorm:"default:'默认昵称'"`
 	Email    string
 	Password string
-	Wx       *string
-	Qq       *string
+	Wx       string
+	Qq       string
 	Os       string
 	Device   string
 	Ip       string

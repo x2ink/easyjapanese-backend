@@ -47,6 +47,21 @@ func Execute(router *gin.Engine) {
 	router.GET("/grammar", getGrammarList)
 	router.GET("/grammar/:id", getGrammarInfo)
 	router.GET("/unread", middleware.User(), getUnread)
+	router.GET("/ranking", middleware.User(), getRanking)
+}
+
+type RankingRes struct {
+	User      userInfo `json:"user"`
+	WordCount int      `json:"word_count"`
+	UserID    uint     `json:"user_id"`
+}
+
+func getRanking(c *gin.Context) {
+	res := make([]RankingRes, 0)
+	DB.Preload("User").Select("COUNT(id) as word_count", "user_id").Model(&models.LearnRecord{}).Group("user_id").Order("word_count desc").Find(&res)
+	c.JSON(http.StatusOK, gin.H{
+		"data": res,
+	})
 }
 func getUnread(c *gin.Context) {
 	UserId, _ := c.Get("UserId")

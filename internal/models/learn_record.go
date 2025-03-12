@@ -12,6 +12,7 @@ type LearnRecord struct {
 	ReviewCount int    `gorm:"column:review_count;default:0" json:"review_count"`
 	ErrorCount  int    `gorm:"column:error_count;default:0" json:"error_count"`
 	Word        Jadict `gorm:"foreignKey:WordID" json:"word"`
+	User        Users  `gorm:"foreignKey:UserID" json:"user"`
 	Done        bool   `gorm:"column:done;default:false" json:"done"`
 }
 

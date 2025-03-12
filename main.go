@@ -13,6 +13,7 @@ func main() {
 	db.InitMysql()
 	db.InitRedis()
 	router := gin.Default()
+	router.Static("/file", "./file")
 	router.OPTIONS("/*any", func(c *gin.Context) {
 		c.Header("Access-Control-Allow-Origin", "*")
 		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
@@ -21,7 +22,7 @@ func main() {
 	})
 
 	router.Use(cors.New(cors.Config{
-		AllowOrigins: []string{"http://192.168.0.104:5173", "http://localhost:5173", "http://192.168.0.103:5173"},
+		AllowOrigins: []string{"http://192.168.218.242:5173", "http://localhost:5173", "http://192.168.0.103:5173"},
 		MaxAge:       12 * time.Hour,
 	}))
 	handlers.Execute(router)
