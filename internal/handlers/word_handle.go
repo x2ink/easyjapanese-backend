@@ -27,18 +27,20 @@ type wordBookRes struct {
 }
 
 func (h *WordHandler) WordRoutes(router *gin.Engine) {
-	router.GET("/wordbook", h.getWordBook)
-	router.GET("/todayword", middleware.User(), h.getTodayWord)
-	router.GET("/wordbook/:id/:page/:size", h.getWordBookList)
+	router.POST("/followread", middleware.User(), h.followRead)
+	router.GET("/followread/:id/:page/:size", h.getFollowRead)
 	jc := router.Group("/jc")
 	{
-		jc.POST("/add", h.jcAddWord)
 		jc.GET("/search/:page/:size/:val", h.jcSearch)
 		jc.GET("/info/:id", h.jcInfo)
 	}
+
+	router.GET("/wordbook", h.getWordBook)
+	router.GET("/todayword", middleware.User(), h.getTodayWord)
+	router.GET("/wordbook/:id/:page/:size", h.getWordBookList)
+
 	cj := router.Group("/cj")
 	{
-		cj.POST("/add", h.jcAddWord)
 		cj.GET("/search/:page/:size/:val", h.cjSearch)
 		cj.GET("/info/:id", h.cjInfo)
 	}
@@ -51,6 +53,63 @@ func (h *WordHandler) WordRoutes(router *gin.Engine) {
 		learn.GET("info", h.getInfo)
 	}
 	router.GET("recommend", h.recommendWord)
+}
+
+type FollowReadRes struct {
+	ID     uint      `json:"id"`
+	UserID uint      `gorm:"column:user_id" json:"user_id"`
+	Voice  string    `gorm:"column:voice;size:255" json:"voice"`
+	Like   uint      `gorm:"column:like;default:0" json:"like"`
+	WordID uint      `gorm:"column:word_id" json:"word_id"`
+	User   userInfo  `gorm:"foreignKey:UserID" json:"user"`
+	Time   time.Time `gorm:"column:created_at" json:"time"`
+}
+
+func (h *WordHandler) getFollowRead(c *gin.Context) {
+	page, err := strconv.Atoi(c.Param("page"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"err": "The page format is incorrect"})
+		return
+	}
+	size, err := strconv.Atoi(c.Param("size"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"err": "The size format is incorrect"})
+		return
+	}
+	wordId, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"err": "The id format is incorrect"})
+		return
+	}
+	result := make([]FollowReadRes, 0)
+	var total int64 = 0
+	DB.Model(&models.WordRead{}).Order("id desc").Preload("User").Where("word_id = ?", wordId).Limit(size).Offset(size * (page - 1)).Find(&result)
+	DB.Model(&models.WordRead{}).Where("word_id = ?", wordId).Count(&total)
+	c.JSON(http.StatusOK, gin.H{
+		"data":  result,
+		"total": total,
+		"msg":   "Successfully obtained",
+	})
+}
+func (h *WordHandler) followRead(c *gin.Context) {
+	var Req struct {
+		Voice  string `json:"voice"`
+		WordID uint   `json:"word_id"`
+	}
+	UserId, _ := c.Get("UserId")
+	if err := c.ShouldBindJSON(&Req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"err": err.Error()})
+		return
+	}
+	DB.Where("user_id = ? and word_id and ?", UserId.(uint), Req.WordID).Delete(&models.WordRead{})
+	DB.Create(&models.WordRead{
+		UserID: UserId.(uint),
+		Voice:  Req.Voice,
+		WordID: Req.WordID,
+	})
+	c.JSON(http.StatusOK, gin.H{
+		"msg": "Submitted successfully",
+	})
 }
 func getErrorCount(words []struct {
 	Id         uint `json:"id"`
@@ -446,39 +505,39 @@ func (h *WordHandler) getTodayWord(c *gin.Context) {
 	})
 }
 func (h *WordHandler) getWordBookList(c *gin.Context) {
-	page, err := strconv.Atoi(c.Param("page"))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"err": "The page format is incorrect"})
-		return
-	}
-	size, err := strconv.Atoi(c.Param("size"))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"err": "The size format is incorrect"})
-		return
-	}
-	bookId, err := strconv.ParseUint(c.Param("id"), 10, 32)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid ID format"})
-		return
-	}
-	wordbooks := []models.WordBookRelation{}
-	result := []Res{}
-	var total int64
-	DB.Order("id desc").Preload("Word").Where("book_id = ?", bookId).Limit(size).Offset(size * (page - 1)).Find(&wordbooks)
-	DB.Model(models.WordBookRelation{}).Where("book_id = ?", bookId).Count(&total)
-	for _, book := range wordbooks {
-		result = append(result, Res{
-			Word:    book.Word.Word,
-			Kana:    book.Word.Kana,
-			ID:      book.Word.ID,
-			Meaning: getMeaning(book.Word.Detail),
-		})
-	}
-	c.JSON(http.StatusOK, gin.H{
-		"data":  result,
-		"total": total,
-		"msg":   "Successfully obtained",
-	})
+	//page, err := strconv.Atoi(c.Param("page"))
+	//if err != nil {
+	//	c.JSON(http.StatusBadRequest, gin.H{"err": "The page format is incorrect"})
+	//	return
+	//}
+	//size, err := strconv.Atoi(c.Param("size"))
+	//if err != nil {
+	//	c.JSON(http.StatusBadRequest, gin.H{"err": "The size format is incorrect"})
+	//	return
+	//}
+	//bookId, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	//if err != nil {
+	//	c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid ID format"})
+	//	return
+	//}
+	//wordbooks := []models.WordBookRelation{}
+	//result := []Res{}
+	//var total int64
+	//DB.Order("id desc").Preload("Word").Where("book_id = ?", bookId).Limit(size).Offset(size * (page - 1)).Find(&wordbooks)
+	//DB.Model(models.WordBookRelation{}).Where("book_id = ?", bookId).Count(&total)
+	//for _, book := range wordbooks {
+	//	result = append(result, Res{
+	//		Word:    book.Word.Word,
+	//		Kana:    book.Word.Kana,
+	//		ID:      book.Word.ID,
+	//		Meaning: getMeaning(book.Word.Detail),
+	//	})
+	//}
+	//c.JSON(http.StatusOK, gin.H{
+	//	"data":  result,
+	//	"total": total,
+	//	"msg":   "Successfully obtained",
+	//})
 }
 func (h *WordHandler) getWordBook(c *gin.Context) {
 	res := []wordBookRes{}
@@ -500,69 +559,53 @@ func (h *WordHandler) getWordBook(c *gin.Context) {
 	})
 }
 
-func (h *WordHandler) jcAddWord(c *gin.Context) {
-	var Word models.Jadict
-	if err := c.ShouldBindJSON(&Word); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"err": err.Error()})
-		return
-	}
-	result := DB.Create(&Word)
-	if result.Error != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"err": result.Error.Error()})
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{
-		"msg": "Successfully Added",
-	})
-}
-
-type Res struct {
+type JcdictRes struct {
 	Word    string   `json:"word"`
 	Kana    string   `json:"kana"`
 	ID      uint     `json:"id"`
-	Meaning []string `json:"meaning"`
-	Level   []string `json:"level"`
 	Browse  int      `json:"browse"`
-}
-type ChRes struct {
-	Ch     string `json:"ch"`
-	Pinyin string `json:"pinyin"`
-	Result []Res  `json:"result"`
+	Meaning []string `json:"meaning"`
 }
 
+//type ChRes struct {
+//	Ch     string `json:"ch"`
+//	Pinyin string `json:"pinyin"`
+//	Result []Res  `json:"result"`
+//}
+
 func (h *WordHandler) cjInfo(c *gin.Context) {
-	id, err := strconv.Atoi(c.Param("id"))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"err": "The id format is incorrect"})
-		return
-	}
-	var res ChRes
-	var Word models.Chdict
-	err = DB.Select("ch", "ja", "pinyin").Model(models.Chdict{}).First(&Word, id).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		c.JSON(http.StatusNotFound, gin.H{"err": "The word does not exist"})
-		return
-	}
-	res.Ch = Word.Ch
-	res.Pinyin = Word.Pinyin
-	Word.Browse += 1
-	DB.Save(&Word)
-	var JaWords []models.Jadict
-	if len(Word.Ja) > 0 {
-		DB.Select("detail", "id", "kana", "word").Model(&models.Jadict{}).Where("word IN ?", Word.Ja).Find(&JaWords)
-	}
-	var Res1 Res
-	for _, v1 := range JaWords {
-		Res1.Meaning = getMeaning(v1.Detail)
-		Res1.ID = v1.ID
-		Res1.Kana = v1.Kana
-		Res1.Word = v1.Word
-		res.Result = append(res.Result, Res1)
-	}
-	c.JSON(http.StatusOK, gin.H{
-		"msg":  "Successfully obtained",
-		"data": res,
-	})
+	//id, err := strconv.Atoi(c.Param("id"))
+	//if err != nil {
+	//	c.JSON(http.StatusBadRequest, gin.H{"err": "The id format is incorrect"})
+	//	return
+	//}
+	//var res ChRes
+	//var Word models.Chdict
+	//err = DB.Select("ch", "ja", "pinyin").Model(models.Chdict{}).First(&Word, id).Error
+	//if errors.Is(err, gorm.ErrRecordNotFound) {
+	//	c.JSON(http.StatusNotFound, gin.H{"err": "The word does not exist"})
+	//	return
+	//}
+	//res.Ch = Word.Ch
+	//res.Pinyin = Word.Pinyin
+	//Word.Browse += 1
+	//DB.Save(&Word)
+	//var JaWords []models.Jadict
+	//if len(Word.Ja) > 0 {
+	//	DB.Select("detail", "id", "kana", "word").Model(&models.Jadict{}).Where("word IN ?", Word.Ja).Find(&JaWords)
+	//}
+	//var Res1 Res
+	//for _, v1 := range JaWords {
+	//	Res1.Meaning = getMeaning(v1.Detail)
+	//	Res1.ID = v1.ID
+	//	Res1.Kana = v1.Kana
+	//	Res1.Word = v1.Word
+	//	res.Result = append(res.Result, Res1)
+	//}
+	//c.JSON(http.StatusOK, gin.H{
+	//	"msg":  "Successfully obtained",
+	//	"data": res,
+	//})
 }
 func (h *WordHandler) jcInfo(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
@@ -570,8 +613,19 @@ func (h *WordHandler) jcInfo(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"err": "The id format is incorrect"})
 		return
 	}
-	var Word models.Jadict
-	result := DB.Model(models.Jadict{}).Omit("created_at", "updated_at").First(&Word, id).Error
+	var Word struct {
+		ID       uint                   `json:"id"`
+		Word     string                 `json:"word"`
+		Tone     string                 `json:"tone"`
+		Rome     string                 `json:"rome"`
+		Browse   int                    `json:"browse"`
+		Voice    string                 `json:"voice"`
+		Kana     string                 `json:"kana"`
+		WordType string                 `json:"wordtype"`
+		Meaning  []models.JcdictMeaning `gorm:"foreignKey:WordID;references:ID" json:"meaning"`
+		Example  []models.JcdictExample `gorm:"foreignKey:WordID;references:ID" json:"example"`
+	}
+	result := DB.Preload("Meaning").Preload("Example").Model(models.Jcdict{}).First(&Word, id).Error
 	if errors.Is(result, gorm.ErrRecordNotFound) {
 		c.JSON(http.StatusNotFound, gin.H{
 			"msg": "Word does not exist",
@@ -579,16 +633,13 @@ func (h *WordHandler) jcInfo(c *gin.Context) {
 		return
 	}
 	Word.Browse += 1
-	DB.Save(&Word)
+	DB.Model(models.Jcdict{}).Where("id = ?", Word.ID).Update("browse", Word.Browse)
 	c.JSON(http.StatusOK, gin.H{
 		"msg":  "Successfully obtained",
 		"data": Word,
 	})
 }
 func (h *WordHandler) jcSearch(c *gin.Context) {
-	var Res1 Res
-	var Res2 []Res
-	var Word []models.Jadict
 	page, err := strconv.Atoi(c.Param("page"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"err": "The page format is incorrect"})
@@ -599,23 +650,36 @@ func (h *WordHandler) jcSearch(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"err": "The size format is incorrect"})
 		return
 	}
+	Word := make([]models.Jcdict, 0)
 	val := c.Param("val")
 	searchTerm := fmt.Sprintf("'%s*'", val)
-	var total int64
-	DB.Raw("SELECT word,kana,detail,id FROM jadict WHERE MATCH(word,kana) AGAINST(? IN BOOLEAN MODE) order by LENGTH(word) limit ? offset ?", searchTerm, size, size*(page-1)).Scan(&Word)
-	DB.Raw("SELECT word,kana,detail,id FROM jadict WHERE MATCH(word,kana) AGAINST(? IN BOOLEAN MODE)", searchTerm).Count(&total)
-	if total > 0 {
-		for _, v := range Word {
-			Res1.Meaning = getMeaning(v.Detail)
-			Res1.ID = v.ID
-			Res1.Kana = v.Kana
-			Res1.Word = v.Word
-			Res2 = append(Res2, Res1)
+	DB.Preload("Meaning").Select("browse", "id", "word", "kana").
+		Where("MATCH(word,kana) AGAINST(? IN BOOLEAN MODE)", searchTerm).
+		Order("LENGTH(word)").
+		Limit(size).
+		Offset(size * (page - 1)).
+		Find(&Word)
+	var total int64 = 0
+	DB.Model(&models.Jcdict{}).Select("word", "kana").Where("MATCH(word,kana) AGAINST(? IN BOOLEAN MODE)", searchTerm).
+		Count(&total)
+	var Result []JcdictRes
+	for _, v := range Word {
+		meanings := make([]string, 0)
+		for _, meaning := range v.Meaning {
+			meanings = append(meanings, meaning.Meaning)
 		}
+		item := JcdictRes{
+			Word:    v.Word,
+			Kana:    v.Kana,
+			ID:      v.ID,
+			Browse:  v.Browse,
+			Meaning: meanings,
+		}
+		Result = append(Result, item)
 	}
 	c.JSON(http.StatusOK, gin.H{
 		"msg":   "Successfully obtained",
-		"data":  Res2,
+		"data":  Result,
 		"total": total,
 	})
 }
@@ -691,21 +755,21 @@ func (h *WordHandler) addLearnRecord(c *gin.Context) {
 
 // 推荐单词
 func (h *WordHandler) recommendWord(c *gin.Context) {
-	randomWords := make([]models.WordBookRelation, 0)
-	var Res2 []Res
-	DB.Preload("Word").Preload("Book").Where("id >= (SELECT FLOOR(RAND() * (SELECT MAX(id) FROM word_book_relation)))").Limit(20).Find(&randomWords)
-	for _, v := range randomWords {
-		Res1 := Res{}
-		Res1.Meaning = getMeaning(v.Word.Detail)
-		Res1.ID = v.Word.ID
-		Res1.Kana = v.Word.Kana
-		Res1.Word = v.Word.Word
-		Res1.Browse = v.Word.Browse
-		Res1.Level = append(Res1.Level, v.Book.Tag)
-		Res2 = append(Res2, Res1)
-	}
-	c.JSON(http.StatusOK, gin.H{
-		"data": Res2,
-		"msg":  "Successfully obtained",
-	})
+	//randomWords := make([]models.WordBookRelation, 0)
+	//var Res2 []Res
+	//DB.Preload("Word").Preload("Book").Where("id >= (SELECT FLOOR(RAND() * (SELECT MAX(id) FROM word_book_relation)))").Limit(20).Find(&randomWords)
+	//for _, v := range randomWords {
+	//	Res1 := Res{}
+	//	Res1.Meaning = getMeaning(v.Word.Detail)
+	//	Res1.ID = v.Word.ID
+	//	Res1.Kana = v.Word.Kana
+	//	Res1.Word = v.Word.Word
+	//	Res1.Browse = v.Word.Browse
+	//	Res1.Level = append(Res1.Level, v.Book.Tag)
+	//	Res2 = append(Res2, Res1)
+	//}
+	//c.JSON(http.StatusOK, gin.H{
+	//	"data": Res2,
+	//	"msg":  "Successfully obtained",
+	//})
 }

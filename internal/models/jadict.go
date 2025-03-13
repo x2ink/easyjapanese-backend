@@ -2,11 +2,6 @@ package models
 
 import "gorm.io/gorm"
 
-type Read struct {
-	Top  string `json:"top"`
-	Body string `json:"body"`
-}
-
 type Example struct {
 	Ch    string `json:"ch"`
 	Ja    string `json:"ja"`

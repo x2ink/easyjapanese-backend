@@ -40,36 +40,36 @@ func (h *MybooksHandler) setbook(c *gin.Context) {
 	})
 }
 func (h *MybooksHandler) getWordList(c *gin.Context) {
-	id, _ := strconv.Atoi(c.Param("id"))
-	var Res1 Res
-	Res2 := make([]Res, 0)
-	page, err := strconv.Atoi(c.Param("page"))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"err": "The page format is incorrect"})
-		return
-	}
-	size, err := strconv.Atoi(c.Param("size"))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"err": "The size format is incorrect"})
-		return
-	}
-	words := make([]models.MybooksWordRelation, 0)
-	var total int64
-	DB.Preload("Word").Where("book_id = ?", id).Limit(size).Offset(size * (page - 1)).Find(&words)
-	DB.Model(models.MybooksWordRelation{}).Where("book_id = ?", id).Count(&total)
-	if total > 0 {
-		for _, v := range words {
-			Res1.Meaning = getMeaning(v.Word.Detail)
-			Res1.ID = v.Word.ID
-			Res1.Kana = v.Word.Kana
-			Res1.Word = v.Word.Word
-			Res2 = append(Res2, Res1)
-		}
-	}
-	c.JSON(http.StatusOK, gin.H{
-		"data":  Res2,
-		"total": total,
-	})
+	//id, _ := strconv.Atoi(c.Param("id"))
+	//var Res1 Res
+	//Res2 := make([]Res, 0)
+	//page, err := strconv.Atoi(c.Param("page"))
+	//if err != nil {
+	//	c.JSON(http.StatusBadRequest, gin.H{"err": "The page format is incorrect"})
+	//	return
+	//}
+	//size, err := strconv.Atoi(c.Param("size"))
+	//if err != nil {
+	//	c.JSON(http.StatusBadRequest, gin.H{"err": "The size format is incorrect"})
+	//	return
+	//}
+	//words := make([]models.MybooksWordRelation, 0)
+	//var total int64
+	//DB.Preload("Word").Where("book_id = ?", id).Limit(size).Offset(size * (page - 1)).Find(&words)
+	//DB.Model(models.MybooksWordRelation{}).Where("book_id = ?", id).Count(&total)
+	//if total > 0 {
+	//	for _, v := range words {
+	//		Res1.Meaning = getMeaning(v.Word.Detail)
+	//		Res1.ID = v.Word.ID
+	//		Res1.Kana = v.Word.Kana
+	//		Res1.Word = v.Word.Word
+	//		Res2 = append(Res2, Res1)
+	//	}
+	//}
+	//c.JSON(http.StatusOK, gin.H{
+	//	"data":  Res2,
+	//	"total": total,
+	//})
 }
 func (h *MybooksHandler) delbook(c *gin.Context) {
 	UserId, _ := c.Get("UserId")
