@@ -29,12 +29,14 @@ type wordBookRes struct {
 func (h *WordHandler) WordRoutes(router *gin.Engine) {
 	router.POST("/followread", middleware.User(), h.followRead)
 	router.GET("/followread/:id/:page/:size", h.getFollowRead)
+	router.POST("/followread/:type", middleware.User(), h.likeFollowRead)
+	router.POST("/editword", middleware.User(), h.editWord)
+	router.GET("/editword/:id", h.getEditWord)
 	jc := router.Group("/jc")
 	{
 		jc.GET("/search/:page/:size/:val", h.jcSearch)
 		jc.GET("/info/:id", h.jcInfo)
 	}
-
 	router.GET("/wordbook", h.getWordBook)
 	router.GET("/todayword", middleware.User(), h.getTodayWord)
 	router.GET("/wordbook/:id/:page/:size", h.getWordBookList)
@@ -55,6 +57,51 @@ func (h *WordHandler) WordRoutes(router *gin.Engine) {
 	router.GET("recommend", h.recommendWord)
 }
 
+type editWordRes struct {
+	ID      uint      `json:"id"`
+	Comment string    `gorm:"type:text" json:"comment"`
+	UserID  uint      `gorm:"column:user_id"`
+	User    userInfo  `gorm:"foreignKey:UserID" json:"user"`
+	Time    time.Time `json:"time" gorm:"column:created_at"`
+}
+
+func (h *WordHandler) getEditWord(c *gin.Context) {
+	wordId, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"err": "The id format is incorrect"})
+		return
+	}
+	result := make([]editWordRes, 0)
+	DB.Model(&models.WordEdit{}).Order("id desc").Preload("User").Where("word_id = ?", wordId).Find(&result)
+	c.JSON(http.StatusOK, gin.H{
+		"data": result,
+		"msg":  "Successfully obtained",
+	})
+}
+func (h *WordHandler) editWord(c *gin.Context) {
+	var Req struct {
+		WordID   uint   `json:"word_id"`
+		WordType string `json:"wordtype"`
+		Meaning  string `json:"meaning"`
+		Example  string `json:"example"`
+	}
+	UserId, _ := c.Get("UserId")
+	if err := c.ShouldBindJSON(&Req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"err": err.Error()})
+		return
+	}
+	DB.Create(&models.WordEdit{
+		UserID:   UserId.(uint),
+		WordType: Req.WordType,
+		Meaning:  Req.Meaning,
+		Example:  Req.Example,
+		WordID:   Req.WordID,
+	})
+	c.JSON(http.StatusOK, gin.H{
+		"msg": "Submitted successfully",
+	})
+}
+
 type FollowReadRes struct {
 	ID     uint      `json:"id"`
 	UserID uint      `gorm:"column:user_id" json:"user_id"`
@@ -65,6 +112,32 @@ type FollowReadRes struct {
 	Time   time.Time `gorm:"column:created_at" json:"time"`
 }
 
+func (h *WordHandler) likeFollowRead(c *gin.Context) {
+	var Req struct {
+		ID uint `json:"id"`
+	}
+	UserId, _ := c.Get("UserId")
+	if err := c.ShouldBindJSON(&Req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"err": err.Error()})
+		return
+	}
+	var Res models.WordRead
+	Res.ID = Req.ID
+	result := DB.Where("user_id = ?", UserId.(uint)).First(&Res).Error
+	if errors.Is(result, gorm.ErrRecordNotFound) {
+		c.JSON(http.StatusNotFound, gin.H{"err": result})
+		return
+	} else {
+		if c.Param("type") == "like" {
+			Res.Like += 1
+		} else {
+			Res.Like -= 1
+		}
+		DB.Save(&Res)
+		c.JSON(http.StatusOK, gin.H{"msg": "Liked successfully"})
+		return
+	}
+}
 func (h *WordHandler) getFollowRead(c *gin.Context) {
 	page, err := strconv.Atoi(c.Param("page"))
 	if err != nil {
@@ -178,7 +251,7 @@ func contains[T comparable](slice []T, target T) bool {
 }
 func (h *WordHandler) getInfo(c *gin.Context) {
 	UserId, _ := c.Get("UserId")
-	learnRecords := []models.LearnRecord{}
+	learnRecords := make([]models.LearnRecord, 0)
 	DB.Order("created_at desc").Where("user_id = ?", UserId).Find(&learnRecords)
 	day := 0
 	now := time.Now()
@@ -198,7 +271,7 @@ func (h *WordHandler) getInfo(c *gin.Context) {
 	}
 	var userConfig models.UserConfig
 	DB.Preload("Book").Where("user_id = ?", UserId).First(&userConfig)
-	wordids := []uint{}
+	wordids := make([]uint, 0)
 	DB.Model(models.WordBookRelation{}).Where("book_id = ?", userConfig.BookID).Pluck("word_id", &wordids)
 	learnnum := 0
 	review := 0

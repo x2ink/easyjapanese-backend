@@ -5,7 +5,7 @@ type MybooksWordRelation struct {
 	WordId uint   `json:"word_id"`
 	BookId uint   `json:"book_id"`
 	UserId uint   `json:"user_id"`
-	Word   Jadict `gorm:"foreignKey:WordId" json:"word"`
+	Word   Jcdict `gorm:"foreignKey:WordId" json:"word"`
 }
 
 func (MybooksWordRelation) TableName() string {

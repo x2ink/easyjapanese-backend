@@ -14,14 +14,16 @@ import (
 type MybooksHandler struct{}
 
 func (h *MybooksHandler) MybooksRoutes(router *gin.Engine) {
-	v1 := router.Group("/mybooks").Use(middleware.User())
-	v1.POST("", h.add)
-	v1.GET("", h.getList)
-	v1.POST("/add", h.addword)
-	v1.POST("/set/:id", h.setbook)
-	v1.GET("/list/:id/:page/:size", h.getWordList)
-	v1.POST("/del/word/:wordid/:bookid", h.delword)
-	v1.POST("/del/book/:id", h.delbook)
+	v1 := router.Group("/mybooks/book").Use(middleware.User())
+	v1.POST("", h.addbook)
+	v1.GET("/:id", h.getBookList)
+	v1.DELETE("/:id", h.delbook)
+	v1.PUT("/:id", h.setbook)
+	v2 := router.Group("/mybooks/word").Use(middleware.User())
+	v2.POST("", h.addword)
+	v2.GET("/:id/:page/:size", h.getWordList)
+	v2.DELETE("/:wordid/:bookid", h.delword)
+
 }
 func (h *MybooksHandler) setbook(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
@@ -40,36 +42,39 @@ func (h *MybooksHandler) setbook(c *gin.Context) {
 	})
 }
 func (h *MybooksHandler) getWordList(c *gin.Context) {
-	//id, _ := strconv.Atoi(c.Param("id"))
-	//var Res1 Res
-	//Res2 := make([]Res, 0)
-	//page, err := strconv.Atoi(c.Param("page"))
-	//if err != nil {
-	//	c.JSON(http.StatusBadRequest, gin.H{"err": "The page format is incorrect"})
-	//	return
-	//}
-	//size, err := strconv.Atoi(c.Param("size"))
-	//if err != nil {
-	//	c.JSON(http.StatusBadRequest, gin.H{"err": "The size format is incorrect"})
-	//	return
-	//}
-	//words := make([]models.MybooksWordRelation, 0)
-	//var total int64
-	//DB.Preload("Word").Where("book_id = ?", id).Limit(size).Offset(size * (page - 1)).Find(&words)
-	//DB.Model(models.MybooksWordRelation{}).Where("book_id = ?", id).Count(&total)
-	//if total > 0 {
-	//	for _, v := range words {
-	//		Res1.Meaning = getMeaning(v.Word.Detail)
-	//		Res1.ID = v.Word.ID
-	//		Res1.Kana = v.Word.Kana
-	//		Res1.Word = v.Word.Word
-	//		Res2 = append(Res2, Res1)
-	//	}
-	//}
-	//c.JSON(http.StatusOK, gin.H{
-	//	"data":  Res2,
-	//	"total": total,
-	//})
+	id, _ := strconv.Atoi(c.Param("id"))
+	result := make([]JcdictRes, 0)
+	page, err := strconv.Atoi(c.Param("page"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"err": "The page format is incorrect"})
+		return
+	}
+	size, err := strconv.Atoi(c.Param("size"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"err": "The size format is incorrect"})
+		return
+	}
+	words := make([]models.MybooksWordRelation, 0)
+	var total int64
+	DB.Preload("Word.Meaning").Where("book_id = ?", id).Limit(size).Offset(size * (page - 1)).Find(&words)
+	DB.Model(models.MybooksWordRelation{}).Where("book_id = ?", id).Count(&total)
+	for _, v := range words {
+		meanings := make([]string, 0)
+		for _, meaning := range v.Word.Meaning {
+			meanings = append(meanings, meaning.Meaning)
+		}
+		result = append(result, JcdictRes{
+			Word:    v.Word.Word,
+			Kana:    v.Word.Kana,
+			ID:      v.Word.ID,
+			Browse:  v.Word.Browse,
+			Meaning: meanings,
+		})
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"data":  result,
+		"total": total,
+	})
 }
 func (h *MybooksHandler) delbook(c *gin.Context) {
 	UserId, _ := c.Get("UserId")
@@ -115,7 +120,7 @@ func (h *MybooksHandler) addword(c *gin.Context) {
 		})
 	}
 }
-func (h *MybooksHandler) add(c *gin.Context) {
+func (h *MybooksHandler) addbook(c *gin.Context) {
 	var Req struct {
 		Name     string `json:"name" binding:"required"`
 		Describe string `json:"describe" binding:"required"`
@@ -148,12 +153,31 @@ type MybooksRes struct {
 	Id       uint   `json:"id"`
 	Name     string `json:"name"`
 	Describe string `json:"describe"`
+	Has      bool   `json:"has" gorm:"-"`
 }
 
-func (h *MybooksHandler) getList(c *gin.Context) {
+func containsBookId(m []uint, value uint) bool {
+	for _, k := range m {
+		if k == value {
+			return true
+		}
+	}
+	return false
+}
+func (h *MybooksHandler) getBookList(c *gin.Context) {
 	UserId, _ := c.Get("UserId")
-	var books []MybooksRes
+	wordId := c.Param("id")
+	books := make([]MybooksRes, 0)
+	bookIds := make([]uint, 0)
+	DB.Debug().Model(&models.MybooksWordRelation{}).Where("user_id = ? and word_id = ?", UserId, wordId).Pluck("book_id", &bookIds)
 	DB.Order("id desc").Model(&models.MyBooks{}).Where("user_id = ?", UserId).Find(&books)
+	for k, book := range books {
+		if containsBookId(bookIds, book.Id) {
+			books[k].Has = true
+		} else {
+			books[k].Has = false
+		}
+	}
 	c.JSON(http.StatusOK, gin.H{
 		"msg":  "Successfully obtained",
 		"data": books,
