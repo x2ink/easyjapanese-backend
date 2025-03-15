@@ -11,9 +11,9 @@ type Trend struct {
 	User      Users        `gorm:"foreignKey:UserID" json:"user"`
 	Browse    int          `gorm:"default:0" json:"browse"`
 	Likenum   int          `gorm:"default:0" json:"likenum"`
-	SectionID int          `gorm:"index" json:"section_id" binding:"required"`
-	Like      []TrendLike  `gorm:"foreignKey:TargetID;references:ID" json:"like"`
-	Images    []TrendImage `gorm:"foreignKey:TargetID;references:ID" json:"images"`
+	SectionID int          `gorm:"default:0" json:"section_id"`
+	Like      []TrendLike  `gorm:"foreignKey:TrendID;references:ID" json:"like"`
+	Images    []TrendImage `gorm:"foreignKey:TrendID;references:ID" json:"images"`
 }
 
 func (Trend) TableName() string {

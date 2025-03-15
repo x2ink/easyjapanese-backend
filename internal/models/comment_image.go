@@ -6,9 +6,9 @@ import (
 
 type CommentImage struct {
 	gorm.Model
-	ID       uint   `json:"id"`
-	Url      string `gorm:"type:varchar(255);default:null" json:"url"`
-	TargetID uint   `json:"target_id"`
+	ID        uint   `json:"id"`
+	Url       string `gorm:"type:varchar(255);default:null" json:"url"`
+	CommentID uint   `json:"comment_id"`
 }
 
 func (CommentImage) TableName() string {

@@ -25,14 +25,8 @@ func Execute(router *gin.Engine) {
 	Wordhandler.WordRoutes(router)
 	Trendhandler := &TrendHandler{}
 	Trendhandler.TrendRoutes(router)
-	Sectionhandler := &SectionHandler{}
-	Sectionhandler.SectionRoutes(router)
 	Filehandler := &FileHandler{}
 	Filehandler.FileRoutes(router)
-	Commenthandler := &CommentHandler{}
-	Commenthandler.CommentRoutes(router)
-	Articlehandler := &ArticleHandler{}
-	Articlehandler.ArticleRoutes(router)
 	Mybookshandler := &MybooksHandler{}
 	Mybookshandler.MybooksRoutes(router)
 	Messagehandler := &MessageHandler{}

@@ -1,7 +1,8 @@
-package handlers
+package file
 
 import (
 	. "easyjapanese/db"
+	"easyjapanese/internal/handlers"
 	"easyjapanese/internal/middleware"
 	"easyjapanese/internal/models"
 	"errors"
@@ -54,12 +55,12 @@ func (h *CommentHandler) getOne(c *gin.Context) {
 		children = append(children, listRes{
 			Id:      child.ID,
 			Content: child.Content,
-			ToUser: userInfo{
+			ToUser: handlers.userInfo{
 				Id:       child.ToUser.ID,
 				Avatar:   child.ToUser.Avatar,
 				Nickname: child.ToUser.Nickname,
 			},
-			FromUser: userInfo{
+			FromUser: handlers.userInfo{
 				Id:       child.FromUser.ID,
 				Avatar:   child.FromUser.Avatar,
 				Nickname: child.FromUser.Nickname,
@@ -78,12 +79,12 @@ func (h *CommentHandler) getOne(c *gin.Context) {
 		ChildCount: len(comment.Children),
 		Id:         comment.ID,
 		Content:    comment.Content,
-		ToUser: userInfo{
+		ToUser: handlers.userInfo{
 			Id:       comment.ToUser.ID,
 			Avatar:   comment.ToUser.Avatar,
 			Nickname: comment.ToUser.Nickname,
 		},
-		FromUser: userInfo{
+		FromUser: handlers.userInfo{
 			Id:       comment.FromUser.ID,
 			Avatar:   comment.FromUser.Avatar,
 			Nickname: comment.FromUser.Nickname,
@@ -131,12 +132,12 @@ func (h *CommentHandler) getChild(c *gin.Context) {
 		res := listRes{
 			Id:      comment.ID,
 			Content: comment.Content,
-			ToUser: userInfo{
+			ToUser: handlers.userInfo{
 				Id:       comment.ToUser.ID,
 				Avatar:   comment.ToUser.Avatar,
 				Nickname: comment.ToUser.Nickname,
 			},
-			FromUser: userInfo{
+			FromUser: handlers.userInfo{
 				Id:       comment.FromUser.ID,
 				Avatar:   comment.FromUser.Avatar,
 				Nickname: comment.FromUser.Nickname,
@@ -168,7 +169,7 @@ func (h *CommentHandler) like(c *gin.Context) {
 		})
 		DB.Create(&models.LikeRecord{
 			TargetID: Comment.TargetID,
-			Content:  TruncateString(Comment.Content, 100),
+			Content:  handlers.TruncateString(Comment.Content, 100),
 			ChildID:  int(targetId),
 			ParentID: Comment.ParentID,
 			Target:   "trend",
@@ -191,13 +192,13 @@ func (h *CommentHandler) like(c *gin.Context) {
 
 type listRes struct {
 	Id         uint      `json:"id"`
-	Content    string    `json:"content"`
-	ToUser     userInfo  `json:"to_user"`
-	FromUser   userInfo  `json:"from_user"`
-	Images     []string  `json:"images"`
-	CreatedAt  time.Time `json:"created_at"`
-	Children   []listRes `json:"children"`
-	LikeCount  int       `json:"like_count"`
+	Content   string            `json:"content"`
+	ToUser    handlers.userInfo `json:"to_user"`
+	FromUser  handlers.userInfo `json:"from_user"`
+	Images    []string          `json:"images"`
+	CreatedAt time.Time         `json:"created_at"`
+	Children  []listRes         `json:"children"`
+	LikeCount int               `json:"like_count"`
 	HasLike    bool      `json:"has_like"`
 	ChildCount int       `json:"child_count"`
 }
@@ -260,12 +261,12 @@ func (h *CommentHandler) getList(c *gin.Context) {
 			children = append(children, listRes{
 				Id:      child.ID,
 				Content: child.Content,
-				ToUser: userInfo{
+				ToUser: handlers.userInfo{
 					Id:       child.ToUser.ID,
 					Avatar:   child.ToUser.Avatar,
 					Nickname: child.ToUser.Nickname,
 				},
-				FromUser: userInfo{
+				FromUser: handlers.userInfo{
 					Id:       child.FromUser.ID,
 					Avatar:   child.FromUser.Avatar,
 					Nickname: child.FromUser.Nickname,
@@ -284,12 +285,12 @@ func (h *CommentHandler) getList(c *gin.Context) {
 			ChildCount: len(comment.Children),
 			Id:         comment.ID,
 			Content:    comment.Content,
-			ToUser: userInfo{
+			ToUser: handlers.userInfo{
 				Id:       comment.ToUser.ID,
 				Avatar:   comment.ToUser.Avatar,
 				Nickname: comment.ToUser.Nickname,
 			},
-			FromUser: userInfo{
+			FromUser: handlers.userInfo{
 				Id:       comment.FromUser.ID,
 				Avatar:   comment.FromUser.Avatar,
 				Nickname: comment.FromUser.Nickname,
@@ -303,15 +304,6 @@ func (h *CommentHandler) getList(c *gin.Context) {
 		listres = append(listres, res)
 	}
 	c.JSON(http.StatusOK, gin.H{"data": listres, "total": total})
-}
-
-type addReq struct {
-	Content  string   `json:"content"`
-	To       int64    `json:"to"`
-	Target   string   `json:"target"`
-	TargetID int      `json:"target_id"`
-	ParentID int      `json:"parent_id"`
-	Images   []string `json:"images"`
 }
 
 func (h *CommentHandler) add(c *gin.Context) {
@@ -344,7 +336,7 @@ func (h *CommentHandler) add(c *gin.Context) {
 	}
 	DB.Create(&comment)
 	if uint(Req.To) != UserId.(uint) {
-		sendMessage(uint(Req.To), UserId.(uint), comment.ID, content, comment.Target, comment.TargetID)
+		handlers.sendMessage(uint(Req.To), UserId.(uint), comment.ID, content, comment.Target, comment.TargetID)
 	}
 	for _, v := range Req.Images {
 		DB.Create(&models.CommentImage{TargetID: comment.ID, Url: v})

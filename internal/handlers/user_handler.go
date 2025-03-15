@@ -25,7 +25,7 @@ func (h *UserHandler) UserRoutes(router *gin.Engine) {
 	router.GET("/token/reset/:userId", h.resetToken)
 	rg := router.Group("/user").Use(middleware.User())
 	rg.GET("/info/simple", h.getSimpleUserInfo)
-	rg.POST("/info", h.setUserInfo)
+	rg.PUT("/info", h.setUserInfo)
 
 }
 func (h *UserHandler) wxLogin(c *gin.Context) {
@@ -91,7 +91,7 @@ func wxGetToken(user models.Users, c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"msg": "Successful login", "data": token})
 }
 func (h *UserHandler) setUserInfo(c *gin.Context) {
-	UserId := c.Param("userId")
+	UserId, _ := c.Get("UserId")
 	var Req struct {
 		Nickname string `json:"nickname"`
 		Avatar   string `json:"avatar"`
@@ -107,7 +107,7 @@ func (h *UserHandler) setUserInfo(c *gin.Context) {
 	} else {
 		user.Nickname = Req.Nickname
 		user.Avatar = Req.Avatar
-		DB.Save(&user)
+		DB.Debug().Save(&user)
 		c.JSON(http.StatusOK, gin.H{"msg": "Update success"})
 	}
 }

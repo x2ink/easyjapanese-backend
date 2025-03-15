@@ -8,12 +8,12 @@ type Comment struct {
 	ToUser   Users `gorm:"foreignKey:To" json:"to_user"`
 	From     uint
 	FromUser Users `gorm:"foreignKey:From" json:"From_user"`
-	Target   string
-	TargetID int
-	Like     []CommentLike  `gorm:"foreignKey:TargetID;references:ID" json:"like"`
-	Images   []CommentImage `gorm:"foreignKey:TargetID;references:ID" json:"images"`
+	TrendID  uint
+	Level    uint           `gorm:"default:0"`
+	Like     []CommentLike  `gorm:"foreignKey:CommentID;references:ID" json:"like"`
+	Images   []CommentImage `gorm:"foreignKey:CommentID;references:ID" json:"images"`
 	Content  string
-	ParentID *int      `json:"parent_id"`
+	ParentID *uint     `json:"parent_id"`
 	Children []Comment `gorm:"foreignKey:ParentID" json:"children"`
 	Likenum  int       `gorm:"default:0" json:"likenum"`
 }
