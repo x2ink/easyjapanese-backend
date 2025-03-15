@@ -27,12 +27,14 @@ func (userInfo) TableName() string {
 
 func (h *TrendHandler) TrendRoutes(router *gin.Engine) {
 	router.GET("/section", h.getSection)
+	router.GET("/mytrend/:page/:size", middleware.User(), h.getMyList)
 	v2 := router.Group("/trend").Use(middleware.User())
 	{
 		v2.POST("", h.addTrend)
 		v2.GET("/info/:id", h.getInfo)
 		v2.GET("/:section/:page/:size", h.getList)
 		v2.DELETE("/:id", h.deleteTrend)
+		v2.POST("/like/:id", h.likeTrend)
 	}
 	v3 := router.Group("/comment").Use(middleware.User())
 	{
@@ -41,9 +43,11 @@ func (h *TrendHandler) TrendRoutes(router *gin.Engine) {
 		v3.DELETE("/:id", h.delComment)
 		v3.GET("/:trendid/:sort/:page/:size", h.getCommentList)
 		v3.GET("/:trendid/:sort/:page/:size/:hideid", h.getCommentList)
+		v3.POST("/like/:id", h.likeComment)
+		v3.GET("/child/:parent_id/:page/:size/:sort", h.getChild)
 		//v1.POST("/getone", h.getOne)
 		//v1.GET("/:target/:target_id/:page/:size/:sort/:hide_id", h.getList)
-		//v1.POST("/like/:id", h.like)
+		//
 		//v1.GET("/child/:parent_id/:page/:size/:sort", h.getChild)
 	}
 	//
@@ -51,7 +55,60 @@ func (h *TrendHandler) TrendRoutes(router *gin.Engine) {
 	//
 	//v1.GET("/mylist/:page/:size", h.getMyList)
 	//v1.POST("/like/:id", h.like)
-	//v1.GET("/like/:id", h.getLike)
+}
+func (h *TrendHandler) getChild(c *gin.Context) {
+	parentId, err := strconv.Atoi(c.Param("parent_id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid ParentId format"})
+		return
+	}
+	page, err := strconv.Atoi(c.Param("page"))
+	UserId, _ := c.Get("UserId")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"err": "The page format is incorrect"})
+		return
+	}
+	size, err := strconv.Atoi(c.Param("size"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"err": "The size format is incorrect"})
+		return
+	}
+	var comments []models.Comment
+	sort := c.Param("sort")
+	if sort == "time" {
+		DB.Order("id desc").Preload("ToUser").Preload("Images").Preload("FromUser").Preload("Like").Model(&models.Comment{}).Where("parent_id = ?", parentId).Limit(size).Offset(size * (page - 1)).Find(&comments)
+	} else {
+		DB.Order("likenum desc,id desc").Preload("ToUser").Preload("Images").Preload("FromUser").Preload("Like").Model(&models.Comment{}).Where("parent_id = ?", parentId).Limit(size).Offset(size * (page - 1)).Find(&comments)
+	}
+	var total int64
+	DB.Model(&models.Comment{}).Where("parent_id = ?", parentId).Count(&total)
+	var listres []commentRes
+	for _, comment := range comments {
+		var images []string
+		for _, image := range comment.Images {
+			images = append(images, image.Url)
+		}
+		res := commentRes{
+			Id:      comment.ID,
+			Content: comment.Content,
+			ToUser: userInfo{
+				Id:       comment.ToUser.ID,
+				Avatar:   comment.ToUser.Avatar,
+				Nickname: comment.ToUser.Nickname,
+			},
+			FromUser: userInfo{
+				Id:       comment.FromUser.ID,
+				Avatar:   comment.FromUser.Avatar,
+				Nickname: comment.FromUser.Nickname,
+			},
+			Images:    images,
+			CreatedAt: comment.CreatedAt,
+			LikeCount: comment.Likenum,
+			HasLike:   HasLike(comment.Like, UserId.(uint)),
+		}
+		listres = append(listres, res)
+	}
+	c.JSON(http.StatusOK, gin.H{"data": listres, "total": total})
 }
 
 type commentRes struct {
@@ -69,6 +126,34 @@ type commentRes struct {
 	Top        bool         `json:"top"`
 }
 
+func (h *TrendHandler) likeComment(c *gin.Context) {
+	commentId, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid ID format"})
+		return
+	}
+	UserId, _ := c.Get("UserId")
+	var like models.CommentLike
+	result := DB.Where("comment_id = ? AND user_id = ?", uint(commentId), UserId).First(&like).Error
+	var Comment models.Comment
+	DB.First(&Comment, uint(commentId))
+	if errors.Is(result, gorm.ErrRecordNotFound) {
+		DB.Create(&models.CommentLike{
+			CommentID: uint(commentId),
+			UserID:    UserId.(uint),
+		})
+		Comment.Likenum = Comment.Likenum + 1
+		DB.Save(&Comment)
+		c.JSON(http.StatusOK, gin.H{"msg": "like"})
+		return
+	} else {
+		DB.Unscoped().Delete(&like)
+		Comment.Likenum = Comment.Likenum - 1
+		DB.Save(&Comment)
+		c.JSON(http.StatusOK, gin.H{"msg": "dislike"})
+		return
+	}
+}
 func HasLike(likes []models.CommentLike, userId uint) bool {
 	for _, like := range likes {
 		if like.UserID == userId {
@@ -227,57 +312,33 @@ func (h *TrendHandler) getSection(c *gin.Context) {
 		"data": Res,
 	})
 }
-func (h *TrendHandler) getLike(c *gin.Context) {
-	targetId, err := strconv.ParseUint(c.Param("id"), 10, 32)
+func (h *TrendHandler) likeTrend(c *gin.Context) {
+	trendId, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid ID format"})
+		c.JSON(http.StatusBadRequest, gin.H{"err": "The page format is incorrect"})
 		return
 	}
 	UserId, _ := c.Get("UserId")
-	result := DB.Where("target_id = ? AND user_id = ?", uint(targetId), UserId).First(&models.TrendLike{}).Error
+	var like models.TrendLike
+	result := DB.Where("trend_id = ? AND user_id = ?", uint(trendId), UserId).First(&like).Error
+	var Trend models.Trend
+	DB.First(&Trend, uint(trendId))
 	if errors.Is(result, gorm.ErrRecordNotFound) {
-		c.JSON(http.StatusOK, gin.H{"msg": "Successfully obtained", "data": false})
+		DB.Create(&models.TrendLike{
+			TrendID: uint(trendId),
+			UserID:  UserId.(uint),
+		})
+		Trend.Likenum = Trend.Likenum + 1
+		DB.Save(&Trend)
+		c.JSON(http.StatusOK, gin.H{"msg": "like"})
 		return
 	} else {
-		c.JSON(http.StatusOK, gin.H{"msg": "Successfully obtained", "data": true})
+		DB.Unscoped().Delete(&like)
+		Trend.Likenum = Trend.Likenum - 1
+		DB.Save(&Trend)
+		c.JSON(http.StatusOK, gin.H{"msg": "dislike"})
 		return
 	}
-}
-func (h *TrendHandler) like(c *gin.Context) {
-	//targetId, err := strconv.ParseUint(c.Param("id"), 10, 32)
-	//if err != nil {
-	//	c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid ID format"})
-	//	return
-	//}
-	//UserId, _ := c.Get("UserId")
-	//var like models.TrendLike
-	//result := DB.Where("target_id = ? AND user_id = ?", uint(targetId), UserId).First(&like).Error
-	//var Trend models.Trend
-	//DB.First(&Trend, uint(targetId))
-	//if errors.Is(result, gorm.ErrRecordNotFound) {
-	//	DB.Create(&models.TrendLike{
-	//		TargetID: uint(targetId),
-	//		UserID:   UserId.(uint),
-	//	})
-	//	DB.Create(&models.LikeRecord{
-	//		Content:  TruncateString(Trend.Content, 100),
-	//		TargetID: int(targetId),
-	//		Target:   "trend",
-	//		ToID:     Trend.UserID,
-	//		FromID:   UserId.(uint),
-	//	})
-	//	Trend.Likenum = Trend.Likenum + 1
-	//	DB.Save(&Trend)
-	//	c.JSON(http.StatusOK, gin.H{"msg": "like"})
-	//	return
-	//} else {
-	//	DB.Unscoped().Delete(&like)
-	//	Trend.Likenum = Trend.Likenum - 1
-	//	DB.Save(&Trend)
-	//	DB.Unscoped().Delete(&models.LikeRecord{}, "target = ? and target_id = ?", "trend", uint(targetId))
-	//	c.JSON(http.StatusOK, gin.H{"msg": "dislike"})
-	//	return
-	//}
 }
 
 func trendList(c *gin.Context, trends []TrendCount, total int64) {
@@ -323,6 +384,7 @@ type trendResp struct {
 	User      userInfo  `json:"user"`
 	Id        uint      `json:"id"`
 	My        bool      `json:"my"`
+	Has       bool      `json:"has"`
 }
 type TrendCount struct {
 	models.Trend
@@ -343,7 +405,7 @@ func (h *TrendHandler) getMyList(c *gin.Context) {
 	}
 	var total int64
 	trends := make([]TrendCount, 0)
-	DB.Debug().Preload("User.Role").Preload("Images").Order("id desc").Model(&models.Trend{}).Select("COUNT(comment.id) as comment,trend.*").Joins("left join comment on comment.target='trend' and comment.target_id=trend.id").Where("user_id = ?", UserId).Group("trend.id").Limit(size).Offset(size * (page - 1)).Find(&trends)
+	DB.Preload("User.Role").Preload("Images").Order("id desc").Model(&models.Trend{}).Select("COUNT(comment.id) as comment,trend.*").Joins("left join comment on  comment.trend_id=trend.id").Where("user_id = ?", UserId).Group("trend.id").Limit(size).Offset(size * (page - 1)).Find(&trends)
 	DB.Model(&models.Trend{}).Where("user_id = ?", UserId).Count(&total)
 	trendList(c, trends, total)
 }
@@ -459,7 +521,14 @@ func (h *TrendHandler) getInfo(c *gin.Context) {
 	for _, image := range Trend.Images {
 		images = append(images, image.Url)
 	}
+	has := false
+	for _, like := range Trend.Like {
+		if like.UserID == UserId.(uint) {
+			has = true
+		}
+	}
 	trendResp := trendResp{
+		Has:       has,
 		Id:        Trend.ID,
 		CreatedAt: Trend.CreatedAt,
 		Content:   Trend.Content,

@@ -7,7 +7,6 @@ import (
 	"easyjapanese/utils"
 	"github.com/gin-gonic/gin"
 	"net/http"
-	"strconv"
 	"time"
 )
 
@@ -58,15 +57,15 @@ func getRanking(c *gin.Context) {
 	})
 }
 func getUnread(c *gin.Context) {
-	UserId, _ := c.Get("UserId")
-	var likeTotal int64 = 0
-	var commentTotal int64 = 0
-	DB.Model(&models.LikeRecord{}).Where("to_id = ? and status = 0", UserId.(uint)).Count(&likeTotal)
-	DB.Model(&models.Message{}).Where("to_id = ? and status = 0", UserId.(uint)).Count(&commentTotal)
-	c.JSON(http.StatusOK, gin.H{
-		"like_total":    likeTotal,
-		"comment_total": commentTotal,
-	})
+	//UserId, _ := c.Get("UserId")
+	//var likeTotal int64 = 0
+	//var commentTotal int64 = 0
+	//DB.Model(&models.LikeRecord{}).Where("to_id = ? and status = 0", UserId.(uint)).Count(&likeTotal)
+	//DB.Model(&models.Message{}).Where("to_id = ? and status = 0", UserId.(uint)).Count(&commentTotal)
+	//c.JSON(http.StatusOK, gin.H{
+	//	"like_total":    likeTotal,
+	//	"comment_total": commentTotal,
+	//})
 }
 
 type LikeRecordRes struct {
@@ -92,56 +91,56 @@ func TruncateString(s string, maxLength int) string {
 }
 
 func getLikeRecordList(c *gin.Context) {
-	UserId, _ := c.Get("UserId")
-	page, err := strconv.Atoi(c.Param("page"))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"err": "The page format is incorrect"})
-		return
-	}
-	size, err := strconv.Atoi(c.Param("size"))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"err": "The size format is incorrect"})
-		return
-	}
-	var likeRecords []models.LikeRecord
-	var total int64 = 0
-	DB.Preload("FromUser.Role").Preload("ToUser.Role").Order("id desc").Where("to_id = ?", UserId.(uint)).Model(&models.LikeRecord{}).Limit(size).Offset(size * (page - 1)).Find(&likeRecords)
-	DB.Where("to_id = ?", UserId.(uint)).Model(&models.LikeRecord{}).Count(&total)
-	res := make([]LikeRecordRes, 0)
-	for _, item := range likeRecords {
-		likeRecordRes := LikeRecordRes{
-			ID:        item.ID,
-			CreatedAt: item.CreatedAt,
-			ChildID:   item.ChildID,
-			TargetID:  item.TargetID,
-			ParentID:  item.ParentID,
-			Target:    item.Target,
-			FromID:    item.FromID,
-			ToID:      item.ToID,
-			Status:    item.Status,
-			Content:   item.Content,
-			FromUser: userInfo{
-				Id:       item.FromUser.ID,
-				Avatar:   item.FromUser.Avatar,
-				Nickname: item.FromUser.Nickname,
-				Role:     item.FromUser.Role.Name,
-			},
-			ToUser: userInfo{
-				Id:       item.ToUser.ID,
-				Avatar:   item.ToUser.Avatar,
-				Nickname: item.ToUser.Nickname,
-				Role:     item.ToUser.Role.Name,
-			},
-		}
-		res = append(res, likeRecordRes)
-	}
-	//刷新已读
-	DB.Model(&models.LikeRecord{}).Where("to_id = ?", UserId.(uint)).Updates(models.LikeRecord{Status: 1})
-	c.JSON(http.StatusOK, gin.H{
-		"msg":   "Successfully obtained",
-		"data":  res,
-		"total": total,
-	})
+	//UserId, _ := c.Get("UserId")
+	//page, err := strconv.Atoi(c.Param("page"))
+	//if err != nil {
+	//	c.JSON(http.StatusBadRequest, gin.H{"err": "The page format is incorrect"})
+	//	return
+	//}
+	//size, err := strconv.Atoi(c.Param("size"))
+	//if err != nil {
+	//	c.JSON(http.StatusBadRequest, gin.H{"err": "The size format is incorrect"})
+	//	return
+	//}
+	//var likeRecords []models.LikeRecord
+	//var total int64 = 0
+	//DB.Preload("FromUser.Role").Preload("ToUser.Role").Order("id desc").Where("to_id = ?", UserId.(uint)).Model(&models.LikeRecord{}).Limit(size).Offset(size * (page - 1)).Find(&likeRecords)
+	//DB.Where("to_id = ?", UserId.(uint)).Model(&models.LikeRecord{}).Count(&total)
+	//res := make([]LikeRecordRes, 0)
+	//for _, item := range likeRecords {
+	//	likeRecordRes := LikeRecordRes{
+	//		ID:        item.ID,
+	//		CreatedAt: item.CreatedAt,
+	//		ChildID:   item.ChildID,
+	//		TargetID:  item.TargetID,
+	//		ParentID:  item.ParentID,
+	//		Target:    item.Target,
+	//		FromID:    item.FromID,
+	//		ToID:      item.ToID,
+	//		Status:    item.Status,
+	//		Content:   item.Content,
+	//		FromUser: userInfo{
+	//			Id:       item.FromUser.ID,
+	//			Avatar:   item.FromUser.Avatar,
+	//			Nickname: item.FromUser.Nickname,
+	//			Role:     item.FromUser.Role.Name,
+	//		},
+	//		ToUser: userInfo{
+	//			Id:       item.ToUser.ID,
+	//			Avatar:   item.ToUser.Avatar,
+	//			Nickname: item.ToUser.Nickname,
+	//			Role:     item.ToUser.Role.Name,
+	//		},
+	//	}
+	//	res = append(res, likeRecordRes)
+	//}
+	////刷新已读
+	//DB.Model(&models.LikeRecord{}).Where("to_id = ?", UserId.(uint)).Updates(models.LikeRecord{Status: 1})
+	//c.JSON(http.StatusOK, gin.H{
+	//	"msg":   "Successfully obtained",
+	//	"data":  res,
+	//	"total": total,
+	//})
 }
 func feedback(c *gin.Context) {
 	var Req struct {
