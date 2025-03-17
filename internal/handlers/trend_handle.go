@@ -4,6 +4,7 @@ import (
 	. "easyjapanese/db"
 	"easyjapanese/internal/middleware"
 	"easyjapanese/internal/models"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/gin-gonic/gin"
@@ -144,6 +145,16 @@ func (h *TrendHandler) likeComment(c *gin.Context) {
 		})
 		Comment.Likenum = Comment.Likenum + 1
 		DB.Save(&Comment)
+		path := fmt.Sprintf("/trendpages/trenddetail/trenddetail?id=%d", Comment.TrendID)
+		msg := Message{
+			ToID:    Comment.From,
+			FromID:  UserId.(uint),
+			Content: captureContent(Comment.Content),
+			Title:   "点赞了你的评论",
+			Path:    path,
+			Form:    "like",
+		}
+		SendMessage(msg)
 		c.JSON(http.StatusOK, gin.H{"msg": "like"})
 		return
 	} else {
@@ -277,18 +288,23 @@ func (h *TrendHandler) addComment(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"err": err.Error()})
 		return
 	}
+	trend := models.Trend{}
+	DB.First(&trend, Req.TrentID)
 	var ParentID *uint
-	//content := ""
+	msg := Message{
+		ToID:    trend.UserID,
+		FromID:  UserId.(uint),
+		Content: "",
+		Form:    "msg",
+	}
 	if Req.ParentID == 0 {
 		ParentID = nil
-		//var trend models.Trend
-		//DB.First(&trend, Req.TargetID)
-		//content = trend.Content
+		msg.Path = fmt.Sprintf("/trendpages/trenddetail/trenddetail?id=%d", Req.TrentID)
+		msg.Title = "回复了你的动态"
 	} else {
 		ParentID = &Req.ParentID
-		//var comment models.Comment
-		//DB.First(&comment, ParentID)
-		//content = comment.Content
+		msg.Path = fmt.Sprintf("/trendpages/trenddetail/trenddetail?id=%d", Req.TrentID)
+		msg.Title = "回复了你的评论"
 	}
 	comment := &models.Comment{
 		Content:  Req.Content,
@@ -297,7 +313,36 @@ func (h *TrendHandler) addComment(c *gin.Context) {
 		TrendID:  Req.TrentID,
 		ParentID: ParentID,
 	}
-	DB.Debug().Create(&comment)
+	var msgId uint
+	if Req.To != UserId.(uint) {
+		msgId = SendMessage(msg)
+	}
+	DB.Create(&comment)
+	if Req.To != UserId.(uint) {
+		msgContent := struct {
+			ParentID  uint   `json:"parent_id"`
+			Title     string `json:"title"`
+			Content   string `json:"content"`
+			Like      bool   `json:"like"`
+			CommentId uint   `json:"comment_id"`
+			TrendId   uint   `json:"trend_id"`
+		}{
+			Title:     Req.Content,
+			CommentId: comment.ID,
+			TrendId:   Req.TrentID,
+		}
+		if Req.ParentID == 0 {
+			msgContent.Content = captureContent(trend.Content)
+			msgContent.ParentID = comment.ID
+		} else {
+			var commentContent models.Comment
+			DB.First(&commentContent, Req.ParentID)
+			msgContent.Content = captureContent(commentContent.Content)
+			msgContent.ParentID = Req.ParentID
+		}
+		jsonData, _ := json.Marshal(msgContent)
+		DB.Model(&models.Message{}).Where("id = ?", msgId).Update("content", string(jsonData))
+	}
 	for _, v := range Req.Images {
 		DB.Create(&models.CommentImage{CommentID: comment.ID, Url: v})
 	}
@@ -311,6 +356,13 @@ func (h *TrendHandler) getSection(c *gin.Context) {
 		"msg":  "Successfully obtained",
 		"data": Res,
 	})
+}
+func captureContent(content string) string {
+	if len(content) < 20 {
+		return content
+	} else {
+		return content[:20] + "..."
+	}
 }
 func (h *TrendHandler) likeTrend(c *gin.Context) {
 	trendId, err := strconv.Atoi(c.Param("id"))
@@ -330,6 +382,16 @@ func (h *TrendHandler) likeTrend(c *gin.Context) {
 		})
 		Trend.Likenum = Trend.Likenum + 1
 		DB.Save(&Trend)
+		path := fmt.Sprintf("/trendpages/trenddetail/trenddetail?id=%d", trendId)
+		msg := Message{
+			ToID:    Trend.UserID,
+			FromID:  UserId.(uint),
+			Content: captureContent(Trend.Content),
+			Title:   "点赞了你的动态",
+			Path:    path,
+			Form:    "like",
+		}
+		SendMessage(msg)
 		c.JSON(http.StatusOK, gin.H{"msg": "like"})
 		return
 	} else {
@@ -471,7 +533,7 @@ func (h *TrendHandler) addTrend(c *gin.Context) {
 		UserID:    UserId.(uint),
 		SectionID: Req.SectionId,
 	}
-	DB.Debug().Create(&trend)
+	DB.Create(&trend)
 	for _, v := range Req.Images {
 		DB.Create(&models.TrendImage{TrendID: trend.ID, Url: v})
 	}

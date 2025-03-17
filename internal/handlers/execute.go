@@ -57,15 +57,18 @@ func getRanking(c *gin.Context) {
 	})
 }
 func getUnread(c *gin.Context) {
-	//UserId, _ := c.Get("UserId")
-	//var likeTotal int64 = 0
-	//var commentTotal int64 = 0
-	//DB.Model(&models.LikeRecord{}).Where("to_id = ? and status = 0", UserId.(uint)).Count(&likeTotal)
-	//DB.Model(&models.Message{}).Where("to_id = ? and status = 0", UserId.(uint)).Count(&commentTotal)
-	//c.JSON(http.StatusOK, gin.H{
-	//	"like_total":    likeTotal,
-	//	"comment_total": commentTotal,
-	//})
+	UserId, _ := c.Get("UserId")
+	var likeTotal int64 = 0
+	var commentTotal int64 = 0
+	var noticeTotal int64 = 0
+	DB.Model(&models.Message{}).Where("to_id = ? and status = 0 and type = 'like'", UserId.(uint)).Count(&likeTotal)
+	DB.Model(&models.Message{}).Where("to_id = ? and status = 0 and type = 'msg'", UserId.(uint)).Count(&commentTotal)
+	DB.Model(&models.Message{}).Where("to_id = ? and status = 0 and type = 'notice'", UserId.(uint)).Count(&noticeTotal)
+	c.JSON(http.StatusOK, gin.H{
+		"like_total":   likeTotal,
+		"msg_total":    commentTotal,
+		"notice_total": noticeTotal,
+	})
 }
 
 type LikeRecordRes struct {
