@@ -5,9 +5,10 @@ import (
 	"easyjapanese/internal/middleware"
 	"easyjapanese/internal/models"
 	"easyjapanese/utils"
-	"github.com/gin-gonic/gin"
 	"net/http"
 	"time"
+
+	"github.com/gin-gonic/gin"
 )
 
 func Execute(router *gin.Engine) {
@@ -167,10 +168,9 @@ func feedback(c *gin.Context) {
 }
 
 type GrammarRes struct {
-	Grammar string           `json:"grammar"`
-	Id      uint             `json:"id"`
-	Level   string           `json:"level"`
-	Example []models.Example `json:"example" gorm:"serializer:json"`
+	Grammar string `json:"grammar"`
+	Id      uint   `json:"id"`
+	Level   string `json:"level"`
 }
 
 func getGrammarInfo(c *gin.Context) {

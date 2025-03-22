@@ -35,7 +35,9 @@ func (h *WordHandler) WordRoutes(router *gin.Engine) {
 	jc := router.Group("/jc")
 	{
 		jc.GET("/search/:page/:size/:val", h.jcSearch)
+		jc.GET("/list/:page/:size", h.jcList)
 		jc.GET("/info/:id", h.jcInfo)
+		jc.PUT("/:id", h.setInfo)
 	}
 	router.GET("/wordbook", h.getWordBook)
 	router.GET("/todayword", middleware.User(), h.getTodayWord)
@@ -78,6 +80,48 @@ func (h *WordHandler) getEditWord(c *gin.Context) {
 		"msg":  "Successfully obtained",
 	})
 }
+func (h *WordHandler) setInfo(c *gin.Context) {
+	var Req struct {
+		Rome     string   `json:"rome"`
+		Kana     string   `json:"kana"`
+		WordType string   `json:"wordtype"`
+		Meaning  []string `json:"meanings"`
+	}
+	if err := c.ShouldBindJSON(&Req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"err": err.Error()})
+		return
+	}
+	wordId, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"err": "The size format is incorrect"})
+		return
+	}
+	if wordId == 0 {
+		c.JSON(http.StatusOK, gin.H{
+			"msg": "Submitted successfully",
+		})
+		return
+	}
+	var word models.Jcdict
+	DB.First(&word, wordId)
+	word.Rome = Req.Rome
+	word.Kana = Req.Kana
+	word.WordType = Req.WordType
+	DB.Save(&word)
+	DB.Where("word_id=?", wordId).Delete(&models.JcdictMeaning{})
+	means := make([]models.JcdictMeaning, 0)
+	for _, v := range Req.Meaning {
+		means = append(means, models.JcdictMeaning{
+			WordID:  uint(wordId),
+			Meaning: v,
+		})
+	}
+	DB.Create(&means)
+	c.JSON(http.StatusOK, gin.H{
+		"msg": "Submitted successfully",
+	})
+}
+
 func (h *WordHandler) editWord(c *gin.Context) {
 	var Req struct {
 		WordID   uint   `json:"word_id"`
@@ -710,6 +754,30 @@ func (h *WordHandler) jcInfo(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"msg":  "Successfully obtained",
 		"data": Word,
+	})
+}
+func (h *WordHandler) jcList(c *gin.Context) {
+	page, err := strconv.Atoi(c.Param("page"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"err": "The page format is incorrect"})
+		return
+	}
+	size, err := strconv.Atoi(c.Param("size"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"err": "The size format is incorrect"})
+		return
+	}
+	Word := make([]models.Jcdict, 0)
+	DB.Preload("Meaning").Select("rome", "id", "word", "kana", "word_type").
+		Limit(size).
+		Offset(size * (page - 1)).
+		Find(&Word)
+	var total int64 = 0
+	DB.Model(&models.Jcdict{}).Select("id").Count(&total)
+	c.JSON(http.StatusOK, gin.H{
+		"msg":   "Successfully obtained",
+		"data":  Word,
+		"total": total,
 	})
 }
 func (h *WordHandler) jcSearch(c *gin.Context) {

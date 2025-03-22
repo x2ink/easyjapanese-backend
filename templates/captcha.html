@@ -1,9 +1,10 @@
 <!doctype html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport"
-          content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
+        content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
     <meta http-equiv="X-UA-Compatible" content="ie=edge">
     <title>验证码</title>
     <style>
@@ -14,46 +15,48 @@
 
         body {
             background: #F2F3F5;
+            display: flex;
+            /* 新增弹性布局 */
+            justify-content: center;
+            /* 水平居中 */
+            align-items: center;
         }
 
         .box {
-            width: 50vw;
-            background: white;
-            padding: 40px;
-            margin: 40px auto;
+            width: min(98%, 600px);
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+            padding: 50px 40px;
+            margin: 50px auto;
+            /* 修正为上下0左右自动 */
         }
 
         .head {
             display: flex;
             align-items: center;
+            gap: 10px;
+            /* 调整间距为10px */
         }
 
         .head img {
             height: 30px;
-            width: auto;
+            width: 30px;
+            border-radius: 8px;
+            /* 圆角设置 */
+            object-fit: cover;
+            flex-shrink: 0;
+            margin: 0;
+            /* 移除原有右边距 */
         }
 
-        .hr {
-            height: 1px;
-            background: #ECEDF0;
-            margin: 20px 0;
+        /* 删除动画相关代码 */
+        .number {
+            font-size: clamp(24px, 8vw, 42px);
+            letter-spacing: 0.5em;
+            word-break: keep-all;
+            /* 移除 animation: pulse 1.5s ease-in-out infinite; */
         }
 
-        .email {
-            text-decoration: underline;
-            color: #1677ff;
-        }
-
-        .body > p {
-            line-height: 28px;
-        }
-
-        .captcha {
-            width: 50%;
-            padding: 20px;
-            margin: 40px auto;
-            background: #F2F3F5;
-        }
 
         .number {
             font-weight: 800;
@@ -72,24 +75,46 @@
             font-size: 12px;
             color: #909399;
         }
+
+        .captcha {
+            width: min(95%, 300px);
+            margin: 20px auto;
+            padding: 15px 10px;
+            background: #F2F3F5;
+            /* 恢复背景色 */
+            border-radius: 8px;
+            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.05);
+        }
+
+        .brand-text {
+            font-size: clamp(24px, 5vw, 32px);
+            /* 加大字号范围 */
+            font-weight: 900;
+            /* 加粗至900 */
+            color: #1a1a1a;
+            letter-spacing: 2px;
+        }
     </style>
 </head>
+
 <body>
-<div class="box">
-    <div class="head">
-        <img alt="" src="https://inews.gtimg.com/newsapp_bt/0/15822349472/0"/>
-    </div>
-    <div class="hr"></div>
-    <div class="body">
-        <p>你好，<span class="email">{{ .Email }}</span></p>
-        <p>你的验证码为：</p>
-        <div class="captcha">
-            <p class="number">{{ .Captcha }}</p>
-            <div class="hr2"></div>
-            <p class="tip">5分钟之内有效，请勿向他人泄露</p>
+    <div class="box">
+        <div class="head">
+            <img alt="网站Logo" src="http://jp.x2.ink/images/logo.png">
+            <span class="brand-text">轻松日语</span>
         </div>
+        <div class="hr"></div>
+        <div class="body">
+            <p>你好，<span class="email">{{ .Email }}</span></p>
+            <p>你的验证码为：</p>
+            <div class="captcha">
+                <p class="number">{{ .Captcha }}</p>
+                <div class="hr2"></div>
+                <p class="tip">5分钟之内有效，请勿向他人泄露</p>
+            </div>
+        </div>
+        <p></p>
     </div>
-    <p></p>
-</div>
 </body>
+
 </html>

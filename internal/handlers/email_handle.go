@@ -3,8 +3,9 @@ package handlers
 import (
 	"crypto/tls"
 	"easyjapanese/config"
-	"gopkg.in/gomail.v2"
 	"log"
+
+	"gopkg.in/gomail.v2"
 )
 
 func SendEmail(title, content, to string) bool {

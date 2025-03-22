@@ -34,6 +34,7 @@ func (h *TrendHandler) TrendRoutes(router *gin.Engine) {
 		v2.POST("", h.addTrend)
 		v2.GET("/info/:id", h.getInfo)
 		v2.GET("/:section/:page/:size", h.getList)
+		v2.GET("/search/:page/:size/:val", h.searchTrend)
 		v2.DELETE("/:id", h.deleteTrend)
 		v2.POST("/like/:id", h.likeTrend)
 	}
@@ -90,8 +91,9 @@ func (h *TrendHandler) getChild(c *gin.Context) {
 			images = append(images, image.Url)
 		}
 		res := commentRes{
-			Id:      comment.ID,
-			Content: comment.Content,
+			ToComment: comment.ToComment,
+			Id:        comment.ID,
+			Content:   comment.Content,
 			ToUser: userInfo{
 				Id:       comment.ToUser.ID,
 				Avatar:   comment.ToUser.Avatar,
@@ -121,6 +123,7 @@ type commentRes struct {
 	CreatedAt  time.Time    `json:"created_at"`
 	Children   []commentRes `json:"children"`
 	LikeCount  int          `json:"like_count"`
+	ToComment  uint         `json:"to_comment"`
 	HasLike    bool         `json:"has_like"`
 	ChildCount int          `json:"child_count"`
 	ParentId   *uint        `json:"parent_id"`
@@ -220,9 +223,10 @@ func (h *TrendHandler) getCommentList(c *gin.Context) {
 				childimage = append(childimage, image.Url)
 			}
 			children = append(children, commentRes{
-				Id:       child.ID,
-				Content:  child.Content,
-				ParentId: child.ParentID,
+				ToComment: child.ToComment,
+				Id:        child.ID,
+				Content:   child.Content,
+				ParentId:  child.ParentID,
 				ToUser: userInfo{
 					Id:       child.ToUser.ID,
 					Avatar:   child.ToUser.Avatar,
@@ -250,6 +254,7 @@ func (h *TrendHandler) getCommentList(c *gin.Context) {
 			top = true
 		}
 		res := commentRes{
+			ToComment:  comment.ToComment,
 			Top:        top,
 			ChildCount: len(comment.Children),
 			Id:         comment.ID,
@@ -277,11 +282,12 @@ func (h *TrendHandler) getCommentList(c *gin.Context) {
 }
 func (h *TrendHandler) addComment(c *gin.Context) {
 	var Req struct {
-		Content  string   `json:"content"`
-		To       uint     `json:"to"`
-		TrentID  uint     `json:"trend_id"`
-		ParentID uint     `json:"parent_id"`
-		Images   []string `json:"images"`
+		Content   string   `json:"content"`
+		To        uint     `json:"to"`
+		TrentID   uint     `json:"trend_id"`
+		ParentID  uint     `json:"parent_id"`
+		Images    []string `json:"images"`
+		ToComment uint     `json:"to_comment"`
 	}
 	UserId, _ := c.Get("UserId")
 	if err := c.ShouldBindJSON(&Req); err != nil {
@@ -307,11 +313,12 @@ func (h *TrendHandler) addComment(c *gin.Context) {
 		msg.Title = "回复了你的评论"
 	}
 	comment := &models.Comment{
-		Content:  Req.Content,
-		To:       Req.To,
-		From:     UserId.(uint),
-		TrendID:  Req.TrentID,
-		ParentID: ParentID,
+		Content:   Req.Content,
+		To:        Req.To,
+		From:      UserId.(uint),
+		TrendID:   Req.TrentID,
+		ParentID:  ParentID,
+		ToComment: Req.ToComment,
 	}
 	var msgId uint
 	if Req.To != UserId.(uint) {
@@ -471,6 +478,25 @@ func (h *TrendHandler) getMyList(c *gin.Context) {
 	DB.Model(&models.Trend{}).Where("user_id = ?", UserId).Count(&total)
 	trendList(c, trends, total)
 }
+func (h *TrendHandler) searchTrend(c *gin.Context) {
+	page, err := strconv.Atoi(c.Param("page"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"err": "The page format is incorrect"})
+		return
+	}
+	size, err := strconv.Atoi(c.Param("size"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"err": "The size format is incorrect"})
+		return
+	}
+	val := c.Param("val")
+	var total int64
+	trends := make([]TrendCount, 0)
+	likeitem := fmt.Sprintf("%%%s%%", val)
+	DB.Preload("User.Role").Preload("Images").Order("id desc").Model(&models.Trend{}).Select("COUNT(comment.id) as comment,trend.*").Joins("left join comment on comment.trend_id=trend.id").Where("trend.content Like ?", likeitem).Group("trend.id").Limit(size).Offset(size * (page - 1)).Find(&trends)
+	DB.Model(&models.Trend{}).Where("trend.content Like ?", likeitem).Count(&total)
+	trendList(c, trends, total)
+}
 func (h *TrendHandler) getList(c *gin.Context) {
 	page, err := strconv.Atoi(c.Param("page"))
 	if err != nil {
@@ -493,8 +519,8 @@ func (h *TrendHandler) getList(c *gin.Context) {
 		DB.Preload("User.Role").Preload("Images").Order("id desc").Model(&models.Trend{}).Select("COUNT(comment.id) as comment,trend.*").Joins("left join comment on comment.trend_id=trend.id").Group("trend.id").Limit(size).Offset(size * (page - 1)).Find(&trends)
 		DB.Model(&models.Trend{}).Count(&total)
 	} else {
-		DB.Preload("User.Role").Preload("Images").Order("id desc").Model(&models.Trend{}).Select("COUNT(comment.id) as comment,trend.*").Joins("left join comment on comment.trend_id=trend.id").Where("section_id = ?", section).Group("trend.id").Limit(size).Offset(size * (page - 1)).Find(&trends)
-		DB.Model(&models.Trend{}).Where("section_id = ?", section).Count(&total)
+		DB.Preload("User.Role").Preload("Images").Order("id desc").Model(&models.Trend{}).Select("COUNT(comment.id) as comment,trend.*").Joins("left join comment on comment.trend_id=trend.id").Where("trend.section_id = ?", section).Group("trend.id").Limit(size).Offset(size * (page - 1)).Find(&trends)
+		DB.Model(&models.Trend{}).Where("trend.section_id = ?", section).Count(&total)
 	}
 	trendList(c, trends, total)
 }
