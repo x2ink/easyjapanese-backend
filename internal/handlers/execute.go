@@ -6,6 +6,7 @@ import (
 	"easyjapanese/internal/models"
 	"easyjapanese/utils"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -31,8 +32,6 @@ func Execute(router *gin.Engine) {
 	Mybookshandler.MybooksRoutes(router)
 	Messagehandler := &MessageHandler{}
 	Messagehandler.MessageRoutes(router)
-	Noticehandler := &NoticeHandler{}
-	Noticehandler.NoticeRoutes(router)
 	router.GET("/likerecord/:page/:size", middleware.User(), getLikeRecordList)
 	router.GET("/config", middleware.User(), getUserConfig)
 	router.POST("/config", middleware.User(), setUserConfig)
@@ -42,6 +41,51 @@ func Execute(router *gin.Engine) {
 	router.GET("/grammar/:id", getGrammarInfo)
 	router.GET("/unread", middleware.User(), getUnread)
 	router.GET("/ranking", middleware.User(), getRanking)
+	router.GET("/composition/info/:id", getCompositionInfo)
+	router.GET("/composition/list/:page/:size", getCompositionList)
+}
+
+type CompositionRes struct {
+	ID    int    `gorm:"primaryKey;autoIncrement" json:"id"`
+	Title string `gorm:"type:text" json:"title"`
+	Topic string `gorm:"type:text" json:"topic"`
+	Tag   string `gorm:"type:varchar(10)" json:"tag"`
+}
+
+func getCompositionInfo(c *gin.Context) {
+	Id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid ID format"})
+		return
+	}
+	var res models.Composition
+	DB.First(&res, Id)
+	c.JSON(http.StatusOK, gin.H{
+		"msg":  "Successfully obtained",
+		"data": res,
+	})
+}
+
+func getCompositionList(c *gin.Context) {
+	page, err := strconv.Atoi(c.Param("page"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"err": "The page format is incorrect"})
+		return
+	}
+	size, err := strconv.Atoi(c.Param("size"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"err": "The size format is incorrect"})
+		return
+	}
+	var res []CompositionRes
+	var total int64 = 0
+	DB.Order("id desc").Model(&models.Composition{}).Limit(size).Offset(size * (page - 1)).Find(&res)
+	DB.Model(&models.Composition{}).Count(&total)
+	c.JSON(http.StatusOK, gin.H{
+		"msg":   "Successfully obtained",
+		"data":  res,
+		"total": total,
+	})
 }
 
 type RankingRes struct {

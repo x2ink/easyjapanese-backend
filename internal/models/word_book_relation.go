@@ -2,10 +2,10 @@ package models
 
 type WordBookRelation struct {
 	ID     uint     `json:"id"`
-	WordId uint     `json:"word_id"`
-	BookId uint     `json:"book_id"`
-	Word   Jadict   `gorm:"gorm:foreignKey:WordId;references:ID" json:"word"`
-	Book   Wordbook `gorm:"gorm:foreignKey:BookId;references:ID" json:"book"`
+	WordID uint     `json:"word_id"`
+	BookID uint     `json:"book_id"`
+	Word   Jcdict   `gorm:"gorm:foreignKey:WordID;references:ID" json:"word"`
+	Book   WordBook `gorm:"gorm:foreignKey:BookID;references:ID" json:"book"`
 }
 
 func (WordBookRelation) TableName() string {
