@@ -22,6 +22,7 @@ func (h *UserHandler) UserRoutes(router *gin.Engine) {
 	router.POST("/login/:type", h.login)
 	router.POST("/wxlogin", h.wxLogin)
 	router.POST("/repwd", h.rePwd)
+	router.POST("/reemail", middleware.User(), h.reEmail)
 	router.GET("/token/reset/:userId", h.resetToken)
 	rg := router.Group("/user").Use(middleware.User())
 	rg.GET("/info/simple", h.getSimpleUserInfo)
@@ -223,6 +224,49 @@ func loginSuccess(req LoginReq, c *gin.Context) {
 	}
 	token := utils.EncryptToken(tokenData)
 	c.JSON(http.StatusOK, gin.H{"msg": "Successful login", "data": token})
+}
+func (h *UserHandler) reEmail(c *gin.Context) {
+	var Req struct {
+		Email   string `json:"email" binding:"required,email"`
+		Captcha string `json:"captcha" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&Req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"err": err.Error()})
+		return
+	}
+	ctx := context.Background()
+	UserId, _ := c.Get("UserId")
+	//验证验证码是否正确
+	var capt Captcha
+	captcha, err := Rdb.Get(ctx, Req.Email).Result()
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"err": "Captcha validation error", "code": 4001})
+		return
+	}
+	err = json.Unmarshal([]byte(captcha), &capt)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"err": err.Error()})
+		return
+	}
+	if capt.Type == "reemail" && capt.Value == Req.Captcha {
+		emailUser := models.Users{}
+		hasEmail := DB.Where("email=?", Req.Email).First(&emailUser).Error
+		if errors.Is(hasEmail, gorm.ErrRecordNotFound) {
+			var user models.Users
+			DB.First(&user, UserId)
+			user.Email = Req.Email
+			DB.Save(&user)
+			c.JSON(http.StatusOK, gin.H{
+				"msg": "修改成功",
+			})
+		} else {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"err": "Email has been bound", "code": 4002,
+			})
+		}
+	} else {
+		c.JSON(http.StatusBadRequest, gin.H{"err": "Captcha validation error", "code": 4001})
+	}
 }
 func (h *UserHandler) rePwd(c *gin.Context) {
 	var Req struct {

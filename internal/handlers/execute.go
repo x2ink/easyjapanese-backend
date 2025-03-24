@@ -5,11 +5,9 @@ import (
 	"easyjapanese/internal/middleware"
 	"easyjapanese/internal/models"
 	"easyjapanese/utils"
+	"github.com/gin-gonic/gin"
 	"net/http"
 	"strconv"
-	"time"
-
-	"github.com/gin-gonic/gin"
 )
 
 func Execute(router *gin.Engine) {
@@ -32,7 +30,6 @@ func Execute(router *gin.Engine) {
 	Mybookshandler.MybooksRoutes(router)
 	Messagehandler := &MessageHandler{}
 	Messagehandler.MessageRoutes(router)
-	router.GET("/likerecord/:page/:size", middleware.User(), getLikeRecordList)
 	router.GET("/config", middleware.User(), getUserConfig)
 	router.POST("/config", middleware.User(), setUserConfig)
 	router.POST("/feedback", middleware.User(), feedback)
@@ -43,6 +40,7 @@ func Execute(router *gin.Engine) {
 	router.GET("/ranking", middleware.User(), getRanking)
 	router.GET("/composition/info/:id", getCompositionInfo)
 	router.GET("/composition/list/:page/:size", getCompositionList)
+	router.GET("/dailytalk/:page/:size", getDailyTalk)
 }
 
 type CompositionRes struct {
@@ -65,7 +63,27 @@ func getCompositionInfo(c *gin.Context) {
 		"data": res,
 	})
 }
-
+func getDailyTalk(c *gin.Context) {
+	page, err := strconv.Atoi(c.Param("page"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"err": "The page format is incorrect"})
+		return
+	}
+	size, err := strconv.Atoi(c.Param("size"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"err": "The size format is incorrect"})
+		return
+	}
+	var res []models.DailyTalk
+	var total int64 = 0
+	DB.Limit(size).Offset(size * (page - 1)).Find(&res)
+	DB.Model(&models.DailyTalk{}).Count(&total)
+	c.JSON(http.StatusOK, gin.H{
+		"msg":   "Successfully obtained",
+		"data":  res,
+		"total": total,
+	})
+}
 func getCompositionList(c *gin.Context) {
 	page, err := strconv.Atoi(c.Param("page"))
 	if err != nil {
@@ -116,80 +134,6 @@ func getUnread(c *gin.Context) {
 	})
 }
 
-type LikeRecordRes struct {
-	ID        uint      `json:"id"`
-	CreatedAt time.Time `json:"created_at"`
-	ParentID  *int      `json:"parent_id"`
-	ChildID   int       `json:"child_id"`
-	TargetID  int       `json:"target_id"`
-	Target    string    `json:"target"`
-	FromID    uint      `json:"from_id"`
-	ToID      uint      `json:"to_id"`
-	Status    int       `json:"status"`
-	Content   string    `json:"content"`
-	FromUser  userInfo  `json:"from_user"`
-	ToUser    userInfo  `json:"to_user"`
-}
-
-func TruncateString(s string, maxLength int) string {
-	if len(s) > maxLength {
-		return s[:maxLength]
-	}
-	return s
-}
-
-func getLikeRecordList(c *gin.Context) {
-	//UserId, _ := c.Get("UserId")
-	//page, err := strconv.Atoi(c.Param("page"))
-	//if err != nil {
-	//	c.JSON(http.StatusBadRequest, gin.H{"err": "The page format is incorrect"})
-	//	return
-	//}
-	//size, err := strconv.Atoi(c.Param("size"))
-	//if err != nil {
-	//	c.JSON(http.StatusBadRequest, gin.H{"err": "The size format is incorrect"})
-	//	return
-	//}
-	//var likeRecords []models.LikeRecord
-	//var total int64 = 0
-	//DB.Preload("FromUser.Role").Preload("ToUser.Role").Order("id desc").Where("to_id = ?", UserId.(uint)).Model(&models.LikeRecord{}).Limit(size).Offset(size * (page - 1)).Find(&likeRecords)
-	//DB.Where("to_id = ?", UserId.(uint)).Model(&models.LikeRecord{}).Count(&total)
-	//res := make([]LikeRecordRes, 0)
-	//for _, item := range likeRecords {
-	//	likeRecordRes := LikeRecordRes{
-	//		ID:        item.ID,
-	//		CreatedAt: item.CreatedAt,
-	//		ChildID:   item.ChildID,
-	//		TargetID:  item.TargetID,
-	//		ParentID:  item.ParentID,
-	//		Target:    item.Target,
-	//		FromID:    item.FromID,
-	//		ToID:      item.ToID,
-	//		Status:    item.Status,
-	//		Content:   item.Content,
-	//		FromUser: userInfo{
-	//			Id:       item.FromUser.ID,
-	//			Avatar:   item.FromUser.Avatar,
-	//			Nickname: item.FromUser.Nickname,
-	//			Role:     item.FromUser.Role.Name,
-	//		},
-	//		ToUser: userInfo{
-	//			Id:       item.ToUser.ID,
-	//			Avatar:   item.ToUser.Avatar,
-	//			Nickname: item.ToUser.Nickname,
-	//			Role:     item.ToUser.Role.Name,
-	//		},
-	//	}
-	//	res = append(res, likeRecordRes)
-	//}
-	////刷新已读
-	//DB.Model(&models.LikeRecord{}).Where("to_id = ?", UserId.(uint)).Updates(models.LikeRecord{Status: 1})
-	//c.JSON(http.StatusOK, gin.H{
-	//	"msg":   "Successfully obtained",
-	//	"data":  res,
-	//	"total": total,
-	//})
-}
 func feedback(c *gin.Context) {
 	var Req struct {
 		Content string `json:"content"  binding:"required"`

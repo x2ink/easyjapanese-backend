@@ -96,20 +96,20 @@ func (h *MybooksHandler) delword(c *gin.Context) {
 }
 func (h *MybooksHandler) addword(c *gin.Context) {
 	var Req struct {
-		WordId uint `json:"word_id" binding:"required"`
-		BookId uint `json:"book_id" binding:"required"`
+		WordID uint `json:"word_id" binding:"required"`
+		BookID uint `json:"book_id" binding:"required"`
 	}
 	UserId, _ := c.Get("UserId")
 	if err := c.ShouldBindJSON(&Req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"err": err.Error()})
 		return
 	}
-	err := DB.Where("word_id = ? AND book_id = ?", Req.WordId, Req.BookId).First(&models.MybooksWordRelation{}).Error
+	err := DB.Where("word_id = ? AND book_id = ?", Req.WordID, Req.BookID).First(&models.MybooksWordRelation{}).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		DB.Create(&models.MybooksWordRelation{
-			WordId: Req.WordId,
-			BookId: Req.BookId,
-			UserId: UserId.(uint),
+			WordID: Req.WordID,
+			BookID: Req.BookID,
+			UserID: UserId.(uint),
 		})
 		c.JSON(http.StatusOK, gin.H{
 			"msg": "Submitted successfully",
