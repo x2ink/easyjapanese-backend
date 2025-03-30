@@ -190,11 +190,13 @@ func verbTrans(c *gin.Context) {
 }
 func setUserConfig(c *gin.Context) {
 	var Req struct {
-		ID          uint   `json:"id" binding:"required"`
-		LearnGroup  int    `json:"learn_group" binding:"required"`
-		ReviewGroup int    `json:"review_group" binding:"required"`
-		Mode        string `json:"mode" binding:"required"`
-		BookID      int    `json:"book_id" binding:"required"`
+		ID           uint   `json:"id" binding:"required"`
+		LearnGroup   int    `json:"learn_group" binding:"required"`
+		ReviewGroup  int    `json:"review_group" binding:"required"`
+		Mode         string `json:"mode" binding:"required"`
+		BookID       int    `json:"book_id" binding:"required"`
+		Remind       string `json:"remind" binding:"required"`
+		ListenSelect *bool  `json:"listen_select" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&Req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"err": err.Error()})
@@ -209,7 +211,7 @@ func setUserConfig(c *gin.Context) {
 func getUserConfig(c *gin.Context) {
 	UserId, _ := c.Get("UserId")
 	var config models.UserConfig
-	DB.First(&config, "user_id = ?", UserId)
+	DB.Preload("Book").First(&config, "user_id = ?", UserId)
 	c.JSON(http.StatusOK, gin.H{
 		"data": config,
 		"msg":  "Successfully obtained",

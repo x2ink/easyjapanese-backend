@@ -9,7 +9,7 @@ type Jcdict struct {
 	Rome     string             `json:"rome"`
 	Voice    string             `json:"voice"`
 	Kana     string             `json:"kana" gorm:"index"`
-	Wordtype string             `gorm:"column:'wordtype'" json:"wordtype"`
+	Wordtype string             `gorm:"column:wordtype" json:"wordtype"`
 	Browse   int                `json:"browse"`
 	Detail   string             `json:"detail"`
 	Meaning  []JcdictMeaning    `gorm:"foreignKey:WordID;references:ID" json:"meaning"`
