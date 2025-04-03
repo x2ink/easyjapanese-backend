@@ -37,6 +37,7 @@ func (h *WordHandler) WordRoutes(router *gin.Engine) {
 		jc.GET("/info/:id", h.jcInfo)
 		jc.PUT("/:id", h.setInfo)
 	}
+	//推荐单词
 	router.GET("recommend", h.recommendWord)
 	router.GET("/wordbook", h.getWordBook)
 	router.GET("/wordbook/:id/:page/:size", h.getWordBookList)
@@ -73,7 +74,7 @@ func (h *WordHandler) getEditWord(c *gin.Context) {
 		return
 	}
 	result := make([]editWordRes, 0)
-	DB.Model(&models.WordEdit{}).Order("id desc").Preload("User").Where("word_id = ?", wordId).Find(&result)
+	DB.Model(&models.WordEdit{}).Order("id desc").Preload("User").Where("word_id = ? and status = 1", wordId).Find(&result)
 	c.JSON(http.StatusOK, gin.H{
 		"data": result,
 		"msg":  "Successfully obtained",
@@ -123,10 +124,10 @@ func (h *WordHandler) setInfo(c *gin.Context) {
 
 func (h *WordHandler) editWord(c *gin.Context) {
 	var Req struct {
-		WordID   uint   `json:"word_id"`
-		WordType string `json:"wordtype"`
-		Meaning  string `json:"meaning"`
-		Example  string `json:"example"`
+		WordID  uint   `json:"word_id"`
+		Detail  string `json:"detail"`
+		Meaning string `json:"meaning"`
+		Example string `json:"example"`
 	}
 	UserId, _ := c.Get("UserId")
 	if err := c.ShouldBindJSON(&Req); err != nil {
@@ -134,11 +135,11 @@ func (h *WordHandler) editWord(c *gin.Context) {
 		return
 	}
 	DB.Create(&models.WordEdit{
-		UserID:   UserId.(uint),
-		WordType: Req.WordType,
-		Meaning:  Req.Meaning,
-		Example:  Req.Example,
-		WordID:   Req.WordID,
+		UserID:  UserId.(uint),
+		Detail:  Req.Detail,
+		Meaning: Req.Meaning,
+		Example: Req.Example,
+		WordID:  Req.WordID,
 	})
 	c.JSON(http.StatusOK, gin.H{
 		"msg": "Submitted successfully",
@@ -769,27 +770,11 @@ func (h *WordHandler) addLearnRecord(c *gin.Context) {
 
 // 推荐单词
 func (h *WordHandler) recommendWord(c *gin.Context) {
-	randomWords := make([]models.Jcdict, 0)
-	DB.Preload("Meaning").Preload("Book.Book").Where("id >= (SELECT FLOOR(RAND() * (SELECT MAX(id) FROM jcdict)))").Limit(20).Find(&randomWords)
-	var Result []JcdictRes
-	for _, v := range randomWords {
-		meanings := make([]string, 0)
-		for _, meaning := range v.Meaning {
-			meanings = append(meanings, meaning.Meaning)
-		}
-		books := make([]string, 0)
-		for _, book := range v.Book {
-			books = append(books, book.Book.Tag)
-		}
-		item := JcdictRes{
-			Word:    v.Word,
-			Kana:    v.Kana,
-			ID:      v.ID,
-			Browse:  v.Browse,
-			Meaning: meanings,
-			Book:    books,
-		}
-		Result = append(Result, item)
+	recommendWords := make([]models.Jcdict, 0)
+	DB.Order("browse desc").Limit(10).Find(&recommendWords)
+	var Result []string
+	for _, v := range recommendWords {
+		Result = append(Result, v.Word)
 	}
 	c.JSON(http.StatusOK, gin.H{
 		"msg":  "Successfully obtained",
