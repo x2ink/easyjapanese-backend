@@ -26,8 +26,8 @@ func Execute(router *gin.Engine) {
 	Trendhandler.TrendRoutes(router)
 	Filehandler := &FileHandler{}
 	Filehandler.FileRoutes(router)
-	Mybookshandler := &MybooksHandler{}
-	Mybookshandler.MybooksRoutes(router)
+	Bookhandler := &BookHandler{}
+	Bookhandler.BookRoutes(router)
 	Messagehandler := &MessageHandler{}
 	Messagehandler.MessageRoutes(router)
 	router.GET("/config", middleware.User(), getUserConfig)

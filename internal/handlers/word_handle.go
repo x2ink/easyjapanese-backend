@@ -521,23 +521,23 @@ func (h *WordHandler) getWordBookList(c *gin.Context) {
 	})
 }
 func (h *WordHandler) getWordBook(c *gin.Context) {
-	res := make([]wordBookRes, 0)
-	wordbook := make([]models.WordBook, 0)
-	DB.Model(&models.WordBook{}).Preload("Words").Find(&wordbook)
-	for _, word := range wordbook {
-		res = append(res, wordBookRes{
-			ID:       word.ID,
-			Name:     word.Name,
-			Icon:     word.Icon,
-			Category: word.Category,
-			Words:    len(word.Words),
-			Describe: word.Describe,
-		})
-	}
-	c.JSON(http.StatusOK, gin.H{
-		"data": res,
-		"msg":  "Successfully obtained",
-	})
+	//res := make([]wordBookRes, 0)
+	//wordbook := make([]models.WordBook, 0)
+	//DB.Model(&models.WordBook{}).Preload("Words").Find(&wordbook)
+	//for _, word := range wordbook {
+	//	res = append(res, wordBookRes{
+	//		ID:       word.ID,
+	//		Name:     word.Name,
+	//		Icon:     word.Icon,
+	//		Category: word.Category,
+	//		Words:    len(word.Words),
+	//		Describe: word.Describe,
+	//	})
+	//}
+	//c.JSON(http.StatusOK, gin.H{
+	//	"data": res,
+	//	"msg":  "Successfully obtained",
+	//})
 }
 
 type JcdictRes struct {
