@@ -5,6 +5,7 @@ import (
 	"easyjapanese/internal/middleware"
 	"easyjapanese/internal/models"
 	"easyjapanese/utils"
+	"fmt"
 	"github.com/gin-gonic/gin"
 	"net/http"
 	"strconv"
@@ -34,7 +35,9 @@ func Execute(router *gin.Engine) {
 	router.POST("/config", middleware.User(), setUserConfig)
 	router.POST("/feedback", middleware.User(), feedback)
 	router.GET("/verbtrans/:word", verbTrans)
-	router.GET("/grammar", getGrammarList)
+	router.GET("/grammar/search/:page/:size/:val", searchGrammar)
+	router.GET("/grammar/search/:page/:size", searchGrammar)
+	router.GET("/grammar/list/:level/:page/:size", getGrammarList)
 	router.GET("/grammar/:id", getGrammarInfo)
 	router.GET("/unread", middleware.User(), getUnread)
 	router.GET("/ranking", middleware.User(), getRanking)
@@ -156,9 +159,11 @@ func feedback(c *gin.Context) {
 }
 
 type GrammarRes struct {
-	Grammar string `json:"grammar"`
-	Id      uint   `json:"id"`
-	Level   string `json:"level"`
+	Grammar string           `json:"grammar"`
+	Id      uint             `json:"id"`
+	Level   string           `json:"level"`
+	Explain string           `json:"explain"`
+	Example []models.Example `json:"example" gorm:"serializer:json"`
 }
 
 func getGrammarInfo(c *gin.Context) {
@@ -169,11 +174,47 @@ func getGrammarInfo(c *gin.Context) {
 		"data": result,
 	})
 }
-func getGrammarList(c *gin.Context) {
+func searchGrammar(c *gin.Context) {
+	page, err := strconv.Atoi(c.Param("page"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"err": "The page format is incorrect"})
+		return
+	}
+	size, err := strconv.Atoi(c.Param("size"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"err": "The size format is incorrect"})
+		return
+	}
+	val := c.Param("val")
+	var total int64
 	result := make([]GrammarRes, 0)
-	DB.Model(&models.Grammar{}).Find(&result)
+	searchTerm := fmt.Sprintf("%%%s%%", val)
+	DB.Model(&models.Grammar{}).Where("grammar like ?", searchTerm).Limit(size).Offset(size * (page - 1)).Find(&result)
+	DB.Model(&models.Grammar{}).Where("grammar like ?", searchTerm).Count(&total)
 	c.JSON(http.StatusOK, gin.H{
-		"data": result,
+		"data":  result,
+		"total": total,
+	})
+}
+func getGrammarList(c *gin.Context) {
+	page, err := strconv.Atoi(c.Param("page"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"err": "The page format is incorrect"})
+		return
+	}
+	size, err := strconv.Atoi(c.Param("size"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"err": "The size format is incorrect"})
+		return
+	}
+	level := c.Param("level")
+	var total int64
+	result := make([]GrammarRes, 0)
+	DB.Model(&models.Grammar{}).Where("level = ?", level).Limit(size).Offset(size * (page - 1)).Find(&result)
+	DB.Model(&models.Grammar{}).Where("level = ?", level).Count(&total)
+	c.JSON(http.StatusOK, gin.H{
+		"data":  result,
+		"total": total,
 	})
 }
 func verbTrans(c *gin.Context) {

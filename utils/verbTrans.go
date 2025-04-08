@@ -219,9 +219,9 @@ func VerbTransfiguration(str string) []TransRes {
 			word = word + "する"
 		}
 	}
-	res := []TransRes{}
+	res := make([]TransRes, 0)
 	res = append(res, TransRes{
-		Category: "基本型",
+		Category: "基本形",
 		Result:   word,
 	})
 	res = append(res, TransRes{
@@ -269,7 +269,7 @@ func VerbTransfiguration(str string) []TransRes {
 		Result:   word + "な",
 	})
 	res = append(res, TransRes{
-		Category: "使役+被动形",
+		Category: "使役被动形",
 		Result:   PassiveServiceForm(word, verbType),
 	})
 	return res

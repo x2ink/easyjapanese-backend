@@ -39,6 +39,7 @@ func (h *WordHandler) WordRoutes(router *gin.Engine) {
 	}
 	//推荐单词
 	router.GET("recommend", h.recommendWord)
+
 	router.GET("/wordbook", h.getWordBook)
 	router.GET("/wordbook/:id/:page/:size", h.getWordBookList)
 	router.GET("/todayword", middleware.User(), h.getNewWord)
