@@ -201,7 +201,7 @@ func (h *WordHandler) getFollowRead(c *gin.Context) {
 	}
 	result := make([]FollowReadRes, 0)
 	var total int64 = 0
-	DB.Model(&models.WordRead{}).Order("id desc").Preload("User").Where("word_id = ?", wordId).Limit(size).Offset(size * (page - 1)).Find(&result)
+	DB.Debug().Model(&models.WordRead{}).Order("id desc").Preload("User").Where("word_id = ?", wordId).Limit(size).Offset(size * (page - 1)).Find(&result)
 	DB.Model(&models.WordRead{}).Where("word_id = ?", wordId).Count(&total)
 	c.JSON(http.StatusOK, gin.H{
 		"data":  result,
@@ -454,8 +454,7 @@ func (h *WordHandler) getNewWord(c *gin.Context) {
 	DB.First(&config, "user_id = ?", UserId)
 	wordbooks := make([]models.WordBookRelation, 0)
 	result := make([]WordInfo, 0)
-	DB.Debug().
-		Preload("Word.Meaning").Preload("Word.Example").Joins("LEFT JOIN learn_record lr ON lr.word_id = word_book_relation.word_id").
+	DB.Preload("Word.Meaning").Preload("Word.Example").Joins("LEFT JOIN learn_record lr ON lr.word_id = word_book_relation.word_id").
 		Where("lr.word_id IS NULL AND word_book_relation.book_id = ?", config.BookID).
 		Order("word_book_relation.id DESC").
 		Limit(config.LearnGroup).
