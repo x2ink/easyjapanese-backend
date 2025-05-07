@@ -6,6 +6,7 @@ import (
 	"easyjapanese/internal/models"
 	"errors"
 	"fmt"
+	"github.com/duke-git/lancet/v2/slice"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 	"net/http"
@@ -39,23 +40,21 @@ func (h *WordHandler) WordRoutes(router *gin.Engine) {
 	}
 	//推荐单词
 	router.GET("recommend", h.recommendWord)
-
-	router.GET("/wordbook", h.getWordBook)
-	router.GET("/wordbook/:id/:page/:size", h.getWordBookList)
-	router.GET("/todayword", middleware.User(), h.getNewWord)
-
-	cj := router.Group("/cj")
-	{
-		cj.GET("/search/:page/:size/:val", h.cjSearch)
-		cj.GET("/info/:id", h.cjInfo)
-	}
+	//学习单词
 	learn := router.Group("/learn").Use(middleware.User())
 	{
+		learn.GET("newword", h.getNewWord)
 		learn.POST("record/add", h.addLearnRecord)
 		learn.POST("record/update", h.updateLearnRecord)
 		learn.GET("writefrommemory", h.getWriteFromMemory)
 		learn.GET("review", h.getReview)
 		learn.GET("info", h.getInfo)
+	}
+
+	cj := router.Group("/cj")
+	{
+		cj.GET("/search/:page/:size/:val", h.cjSearch)
+		cj.GET("/info/:id", h.cjInfo)
 	}
 
 }
@@ -242,29 +241,31 @@ func getErrorCount(words []struct {
 }
 func (h *WordHandler) updateLearnRecord(c *gin.Context) {
 	UserId, _ := c.Get("UserId")
-	var Req struct {
-		Words []struct {
-			Id         uint `json:"id"`
-			ErrorCount int  `json:"error_count"`
-		}
+	type wordStruct struct {
+		Error  int  ` json:"error"`
+		WordID uint ` json:"word_id"`
 	}
-	cycle := []int{1, 3, 7, 14, 30}
+	var Req struct {
+		Words []wordStruct `json:"words"`
+	}
 	if err := c.ShouldBindJSON(&Req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"err": err.Error()})
 		return
 	}
-	ids := []uint{}
+	cycle := []int{1, 3, 5, 7, 14, 30}
+	ids := make([]uint, 0)
 	for _, word := range Req.Words {
-		ids = append(ids, word.Id)
+		ids = append(ids, word.WordID)
 	}
 	now := time.Now()
 	midnight := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 	dayTimestamp := midnight.Unix()
-	records := []models.LearnRecord{}
+	records := make([]models.LearnRecord, 0)
 	DB.Preload("Word").Where("word_id IN ? AND user_id = ?", ids, UserId).Find(&records)
 	base := 86400
 	for _, record := range records {
-		errorCount := getErrorCount(Req.Words, record.WordID)
+		result, _ := slice.FindBy(Req.Words, func(i int, f wordStruct) bool { return f.WordID == record.WordID })
+		errorCount := result.Error
 		reviewCount := record.ReviewCount
 		if errorCount == 0 {
 			reviewTime := cycle[reviewCount] * base
@@ -294,6 +295,14 @@ func contains[T comparable](slice []T, target T) bool {
 	}
 	return false
 }
+
+type BookInfo struct {
+	Name     string      `json:"name"`
+	ID       uint        `json:"id"`
+	Describe string      `json:"describe"`
+	Icon     models.Icon `json:"icon" gorm:"serializer:json"`
+}
+
 func (h *WordHandler) getInfo(c *gin.Context) {
 	UserId, _ := c.Get("UserId")
 	learnRecords := make([]models.LearnRecord, 0)
@@ -315,7 +324,9 @@ func (h *WordHandler) getInfo(c *gin.Context) {
 		}
 	}
 	var userConfig models.UserConfig
-	DB.Preload("Book").Where("user_id = ?", UserId).First(&userConfig)
+	var bookInfo BookInfo
+	DB.Where("user_id = ?", UserId).First(&userConfig)
+	DB.Model(models.WordBook{}).First(&bookInfo, userConfig.BookID)
 	wordids := make([]uint, 0)
 	DB.Model(models.WordBookRelation{}).Where("book_id = ?", userConfig.BookID).Pluck("word_id", &wordids)
 	learnnum := 0
@@ -335,14 +346,26 @@ func (h *WordHandler) getInfo(c *gin.Context) {
 			learnnum++
 		}
 	}
+	year, month, _ := now.Date()
+	dates := make([]string, 0)
+	DB.Model(models.LearnRecord{}).Where("YEAR(created_at) = ? AND MONTH(created_at) = ?", year, month).
+		Select("DISTINCT DATE_FORMAT(created_at, '%m-%d')").
+		Pluck("DISTINCT DATE_FORMAT(created_at, '%m-%d')", &dates)
+	var dayReview int64 = 0
+	DB.Model(&models.LearnRecord{}).Where("updated_at<? and updated_at>? and updated_at!=created_at", todayEnd, todayStart).Count(&dayReview)
+	var dayLearn int64 = 0
+	DB.Model(&models.LearnRecord{}).Where("created_at<? and created_at>?", todayEnd, todayStart).Count(&dayLearn)
 	c.JSON(http.StatusOK, gin.H{
 		"data": gin.H{
-			"bookname": userConfig.Book.Name,
-			"review":   review,
-			"learn":    learn,
-			"wordnum":  len(wordids),
-			"learnnum": learnnum,
-			"day":      day,
+			"day_review": dayReview,
+			"day_learn":  dayLearn,
+			"wordnum":    len(wordids),
+			"review":     review,
+			"learn":      learn,
+			"learnnum":   learnnum,
+			"day":        day,
+			"book_info":  bookInfo,
+			"dates":      dates,
 		},
 	})
 }
@@ -375,46 +398,37 @@ type reviewRes struct {
 }
 
 func (h *WordHandler) getReview(c *gin.Context) {
-	//now := time.Now()
-	//midnight := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
-	//endOfDay := midnight.Add(23*time.Hour + 59*time.Minute + 59*time.Second)
-	//endOfDayTimestamp := endOfDay.Unix()
-	//words := []models.LearnRecord{}
-	//DB.Order("id desc").Preload("Word").Where("review_time < ?", endOfDayTimestamp).Find(&words)
-	//notin := []uint{}
-	//for _, word := range words {
-	//	notin = append(notin, word.WordID)
-	//}
-	//randomWords := []models.WordBookRelation{}
-	//DB.Order("RAND()").Preload("Word").Where("id NOT IN ?", notin).Limit(len(words) * 4).Find(&randomWords)
-	//result := []reviewRes{}
-	//for _, word := range words {
-	//	var progress []bool
-	//	if word.Word.Kana == word.Word.Word {
-	//		progress = []bool{false, false, false}
-	//	} else {
-	//		progress = []bool{false, false, false}
-	//	}
-	//	today := reviewRes{
-	//		Exercise:      false,
-	//		Done:          false,
-	//		Tone:          word.Word.Tone,
-	//		ErrorCount:    0,
-	//		Progress:      progress,
-	//		Meaning:       getMeaning(word.Word.Detail),
-	//		Word:          word.Word.Word,
-	//		Kana:          word.Word.Kana,
-	//		ID:            word.Word.ID,
-	//		Rome:          word.Word.Rome,
-	//		Voice:         word.Word.Voice,
-	//		Detail:        word.Word.Detail,
-	//		MeaningOption: getMeaningOption(word.Word, randomWords),
-	//	}
-	//	result = append(result, today)
-	//}
-	//c.JSON(http.StatusOK, gin.H{
-	//	"data": result,
-	//})
+	UserId, _ := c.Get("UserId")
+	var config models.UserConfig
+	DB.First(&config, "user_id = ?", UserId)
+	now := time.Now()
+	midnight := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	endOfDay := midnight.Add(23*time.Hour + 59*time.Minute + 59*time.Second)
+	endOfDayTimestamp := endOfDay.Unix()
+	words := make([]models.LearnRecord, 0)
+	result := make([]WordInfo, 0)
+	DB.Order("id desc").Preload("Word.Meaning").Preload("Word.Example").Where("review_time < ?", endOfDayTimestamp).Limit(config.LearnGroup).Find(&words)
+	for _, word := range words {
+		wordinfo := WordInfo{
+			ID:       word.Word.ID,
+			Word:     word.Word.Word,
+			Tone:     word.Word.Tone,
+			Rome:     word.Word.Rome,
+			Browse:   word.Word.Browse,
+			Voice:    word.Word.Voice,
+			Kana:     word.Word.Kana,
+			Wordtype: word.Word.Wordtype,
+			Detail:   word.Word.Detail,
+			Meaning:  word.Word.Meaning,
+			Example:  word.Word.Example,
+		}
+		result = append(result, wordinfo)
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"data":  result,
+		"total": config.LearnGroup,
+		"msg":   "Successfully obtained",
+	})
 }
 func (h *WordHandler) getWriteFromMemory(c *gin.Context) {
 	//words := []models.LearnRecord{}
@@ -480,64 +494,6 @@ func (h *WordHandler) getNewWord(c *gin.Context) {
 		"total": config.LearnGroup,
 		"msg":   "Successfully obtained",
 	})
-}
-func (h *WordHandler) getWordBookList(c *gin.Context) {
-	page, err := strconv.Atoi(c.Param("page"))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"err": "The page format is incorrect"})
-		return
-	}
-	size, err := strconv.Atoi(c.Param("size"))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"err": "The size format is incorrect"})
-		return
-	}
-	bookId, err := strconv.Atoi(c.Param("id"))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid ID format"})
-		return
-	}
-	wordbooks := make([]models.WordBookRelation, 0)
-	result := make([]JcdictRes, 0)
-	var total int64
-	DB.Order("id desc").Preload("Word.Meaning").Where("book_id = ?", bookId).Limit(size).Offset(size * (page - 1)).Find(&wordbooks)
-	DB.Model(models.WordBookRelation{}).Where("book_id = ?", bookId).Count(&total)
-	for _, book := range wordbooks {
-		meanings := make([]string, 0)
-		for _, meaning := range book.Word.Meaning {
-			meanings = append(meanings, meaning.Meaning)
-		}
-		result = append(result, JcdictRes{
-			Word:    book.Word.Word,
-			Kana:    book.Word.Kana,
-			ID:      book.Word.ID,
-			Meaning: meanings,
-		})
-	}
-	c.JSON(http.StatusOK, gin.H{
-		"data":  result,
-		"total": total,
-		"msg":   "Successfully obtained",
-	})
-}
-func (h *WordHandler) getWordBook(c *gin.Context) {
-	//res := make([]wordBookRes, 0)
-	//wordbook := make([]models.WordBook, 0)
-	//DB.Model(&models.WordBook{}).Preload("Words").Find(&wordbook)
-	//for _, word := range wordbook {
-	//	res = append(res, wordBookRes{
-	//		ID:       word.ID,
-	//		Name:     word.Name,
-	//		Icon:     word.Icon,
-	//		Category: word.Category,
-	//		Words:    len(word.Words),
-	//		Describe: word.Describe,
-	//	})
-	//}
-	//c.JSON(http.StatusOK, gin.H{
-	//	"data": res,
-	//	"msg":  "Successfully obtained",
-	//})
 }
 
 type JcdictRes struct {
@@ -747,7 +703,10 @@ func getMeaning(detail []models.Detail) []string {
 func (h *WordHandler) addLearnRecord(c *gin.Context) {
 	var learnRecord []models.LearnRecord
 	var Req struct {
-		Words []uint `json:"words"`
+		Words []struct {
+			Error  int  ` json:"error"`
+			WordID uint ` json:"word_id"`
+		} `json:"words"`
 	}
 	if err := c.ShouldBindJSON(&Req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"err": err.Error()})
@@ -756,10 +715,16 @@ func (h *WordHandler) addLearnRecord(c *gin.Context) {
 	timestamp := time.Now().Unix() + 86400
 	UserId, _ := c.Get("UserId")
 	for _, item := range Req.Words {
+		var reviewTime int64 = 0
+		if item.Error != 0 {
+			reviewTime = timestamp * 3
+		} else {
+			reviewTime = timestamp
+		}
 		learnRecord = append(learnRecord, models.LearnRecord{
-			WordID:     item,
+			WordID:     item.WordID,
 			UserID:     UserId.(uint),
-			ReviewTime: timestamp,
+			ReviewTime: reviewTime,
 		})
 	}
 	DB.Create(&learnRecord)

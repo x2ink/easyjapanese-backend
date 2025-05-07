@@ -21,6 +21,7 @@ func (h *BookHandler) BookRoutes(router *gin.Engine) {
 	v1.POST("", h.addBook)
 	//查看自己的单词本
 	v1.GET("/self/:id", h.getSelfBookList)
+	v1.GET("/list", h.getWordBookList)
 	//编辑单词本
 	v1.PUT("/:id", h.setBook)
 	//发布单词
@@ -237,8 +238,8 @@ func (h *BookHandler) addBook(c *gin.Context) {
 	}
 }
 
-type BookRes struct {
-	Id        uint        `json:"id"`
+type SelfBookRes struct {
+	ID        uint        `json:"id"`
 	Name      string      `json:"name"`
 	Describe  string      `json:"describe"`
 	Has       bool        `json:"has" gorm:"-"`
@@ -247,7 +248,35 @@ type BookRes struct {
 	CreatedAt time.Time   `json:"created_at"`
 	Status    int         `json:"status"`
 }
+type PublicBookRes struct {
+	ID        uint        `json:"id"`
+	Name      string      `json:"name"`
+	Category  string      `json:"category"`
+	Describe  string      `json:"describe"`
+	Current   bool        `json:"current"`
+	LearnNum  int         `json:"learn_num"`
+	WordNum   int         `json:"word_num"`
+	Icon      models.Icon `json:"icon" gorm:"serializer:json"`
+	CreatedAt time.Time   `json:"created_at"`
+	Status    int         `json:"status"`
+}
 
+func (h *BookHandler) getWordBookList(c *gin.Context) {
+	UserId, _ := c.Get("UserId")
+	config := models.UserConfig{}
+	DB.Where("user_id=?", UserId).First(&config)
+	result := make([]PublicBookRes, 0)
+	DB.Debug().Model(&models.WordBook{}).Select("word_book.*,COUNT(DISTINCT user_config.user_id) AS learn_num,COUNT(DISTINCT word_book_relation.id) AS word_num").Joins("left join user_config ON word_book.id = user_config.book_id").Joins("left join word_book_relation ON word_book.id = word_book_relation.book_id").Where("word_book.status=1").Group("word_book.id").Find(&result)
+	for k, item := range result {
+		if config.BookID == item.ID {
+			result[k].Current = true
+		}
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"msg":  "Successfully obtained",
+		"data": result,
+	})
+}
 func containsBookId(m []uint, value uint) bool {
 	for _, k := range m {
 		if k == value {
@@ -261,18 +290,18 @@ func (h *BookHandler) getSelfBookList(c *gin.Context) {
 	wordId := c.Param("id")
 	books := make([]models.WordBook, 0)
 	bookIds := make([]uint, 0)
-	result := make([]BookRes, 0)
+	result := make([]SelfBookRes, 0)
 	DB.Model(&models.WordBookRelation{}).Where("user_id = ? and word_id = ?", UserId, wordId).Pluck("book_id", &bookIds)
 	DB.Order("id desc").Preload("Words").Where("user_id = ?", UserId).Find(&books)
 	for _, book := range books {
-		item := BookRes{}
+		item := SelfBookRes{}
 		if containsBookId(bookIds, book.ID) {
 			item.Has = true
 		} else {
 			item.Has = false
 		}
 		item.Word = len(book.Words)
-		item.Id = book.ID
+		item.ID = book.ID
 		item.Name = book.Name
 		item.CreatedAt = book.CreatedAt
 		item.Describe = book.Describe

@@ -7,7 +7,7 @@ type UserConfig struct {
 	ReviewGroup  int      `gorm:"comment:'每组的数量';default:10" json:"review_group"`
 	Mode         string   `gorm:"comment:'背单词模式';default:'学习模式'" json:"mode"`
 	Book         WordBook `gorm:"foreignKey:BookID;" json:"book"`
-	BookID       int      `gorm:"comment:'正在选择的词书';default:1" json:"book_id"`
+	BookID       uint     `gorm:"comment:'正在选择的词书';default:1" json:"book_id"`
 	ListenSelect bool     `gorm:"default:false" json:"listen_select"`
 	Remind       string   `gorm:"default:'20:30'" json:"remind"`
 }
