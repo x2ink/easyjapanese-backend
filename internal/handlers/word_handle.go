@@ -46,7 +46,7 @@ func (h *WordHandler) WordRoutes(router *gin.Engine) {
 		learn.GET("newword", h.getNewWord)
 		learn.POST("record/add", h.addLearnRecord)
 		learn.POST("record/update", h.updateLearnRecord)
-		learn.GET("writefrommemory", h.getWriteFromMemory)
+		learn.POST("writefrommemory", h.getWriteFromMemory)
 		learn.GET("review", h.getReview)
 		learn.GET("info", h.getInfo)
 	}
@@ -200,8 +200,8 @@ func (h *WordHandler) getFollowRead(c *gin.Context) {
 	}
 	result := make([]FollowReadRes, 0)
 	var total int64 = 0
-	DB.Debug().Model(&models.WordRead{}).Order("id desc").Preload("User").Where("word_id = ?", wordId).Limit(size).Offset(size * (page - 1)).Find(&result)
-	DB.Model(&models.WordRead{}).Where("word_id = ?", wordId).Count(&total)
+	DB.Model(&models.WordRead{}).Order("id desc").Preload("User").Where("word_id = ? and status = 1", wordId).Limit(size).Offset(size * (page - 1)).Find(&result)
+	DB.Model(&models.WordRead{}).Where("word_id = ? and status = 1", wordId).Count(&total)
 	c.JSON(http.StatusOK, gin.H{
 		"data":  result,
 		"total": total,
@@ -370,33 +370,6 @@ func (h *WordHandler) getInfo(c *gin.Context) {
 	})
 }
 
-type writeFromMemory struct {
-	Word       string `json:"word"`
-	Meaning    string `json:"meaning"`
-	Kana       string `json:"kana"`
-	Tone       string `json:"tone"`
-	ID         uint   `json:"id"`
-	ErrorCount uint   `json:"error_count"`
-	Rome       string `json:"rome"`
-	Voice      string `json:"voice"`
-	Done       bool   `json:"done"`
-}
-type reviewRes struct {
-	Exercise      bool            `json:"exercise"`
-	Done          bool            `json:"done"`
-	Tone          string          `json:"tone"`
-	ErrorCount    int             `json:"error_count"`
-	Progress      []bool          `json:"progress"`
-	Meaning       []string        `json:"meaning"`
-	Word          string          `json:"word"`
-	Kana          string          `json:"kana"`
-	ID            uint            `json:"id"`
-	Rome          string          `json:"rome"`
-	Voice         string          `json:"voice"`
-	Detail        []models.Detail `json:"detail" gorm:"serializer:json"`
-	MeaningOption []option        `json:"meaning_option"`
-}
-
 func (h *WordHandler) getReview(c *gin.Context) {
 	UserId, _ := c.Get("UserId")
 	var config models.UserConfig
@@ -431,30 +404,47 @@ func (h *WordHandler) getReview(c *gin.Context) {
 	})
 }
 func (h *WordHandler) getWriteFromMemory(c *gin.Context) {
-	//words := []models.LearnRecord{}
-	//writeFromMemorys := []writeFromMemory{}
-	//todayStart := time.Now().Truncate(24 * time.Hour)
-	//todayEnd := todayStart.Add(24*time.Hour - 1*time.Second)
-	//DB.Order("id desc").
-	//	Preload("Word").
-	//	Where("created_at BETWEEN ? AND ?", todayStart.Format("2006-01-02 15:04:05"), todayEnd.Format("2006-01-02 15:04:05")).
-	//	Find(&words)
-	//for _, word := range words {
-	//	writeFromMemorys = append(writeFromMemorys, writeFromMemory{
-	//		Word:       word.Word.Word,
-	//		Meaning:    strings.Join(getMeaning(word.Word.Detail), ";"),
-	//		Kana:       word.Word.Kana,
-	//		Tone:       word.Word.Tone,
-	//		ID:         word.WordID,
-	//		ErrorCount: 0,
-	//		Rome:       word.Word.Rome,
-	//		Voice:      word.Word.Voice,
-	//		Done:       false,
-	//	})
-	//}
-	//c.JSON(http.StatusOK, gin.H{
-	//	"data": writeFromMemorys,
-	//})
+	var Req struct {
+		Remove []uint `json:"remove"`
+	}
+	if err := c.ShouldBindJSON(&Req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"err": err.Error()})
+		return
+	}
+	UserId, _ := c.Get("UserId")
+	var config models.UserConfig
+	DB.First(&config, "user_id = ?", UserId)
+	words := make([]models.LearnRecord, 0)
+	result := make([]WordInfo, 0)
+	todayStart := time.Now().Truncate(24 * time.Hour)
+	todayEnd := todayStart.Add(24*time.Hour - 1*time.Second)
+	query := DB.Debug().Order("id desc").Preload("Word.Meaning").Preload("Word.Example").
+		Where("created_at BETWEEN ? AND ?", todayStart.Format("2006-01-02 15:04:05"), todayEnd.Format("2006-01-02 15:04:05"))
+	if len(Req.Remove) > 0 {
+		query.Where("word_id not in ?", Req.Remove).Limit(config.WriteGroup).Find(&words)
+	} else {
+		query.Limit(config.WriteGroup).Find(&words)
+	}
+	for _, word := range words {
+		wordinfo := WordInfo{
+			ID:       word.Word.ID,
+			Word:     word.Word.Word,
+			Tone:     word.Word.Tone,
+			Rome:     word.Word.Rome,
+			Browse:   word.Word.Browse,
+			Voice:    word.Word.Voice,
+			Kana:     word.Word.Kana,
+			Wordtype: word.Word.Wordtype,
+			Detail:   word.Word.Detail,
+			Meaning:  word.Word.Meaning,
+			Example:  word.Word.Example,
+		}
+		result = append(result, wordinfo)
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"data": result,
+		"msg":  "Successfully obtained",
+	})
 }
 
 type option struct {
@@ -688,15 +678,6 @@ func removeParenthesesContent(input string) string {
 	result = regexp.MustCompile(`\s+`).ReplaceAllString(result, " ")
 
 	return result
-}
-func getMeaning(detail []models.Detail) []string {
-	var res []string
-	for _, v := range detail {
-		for _, v1 := range v.Detail {
-			res = append(res, removeParenthesesContent(v1.Meaning))
-		}
-	}
-	return res
 }
 
 // 新增学习记录

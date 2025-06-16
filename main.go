@@ -22,7 +22,7 @@ func main() {
 	})
 
 	router.Use(cors.New(cors.Config{
-		AllowOrigins: []string{"http://192.168.43.190:5173", "http://localhost:5173", "http://172.20.10.10:5173", "http://localhost:3000"},
+		AllowOrigins: []string{"http://192.168.0.106:5173", "http://localhost:5173", "http://172.20.10.10:5173", "http://localhost:3000"},
 		MaxAge:       12 * time.Hour,
 	}))
 	handlers.Execute(router)
