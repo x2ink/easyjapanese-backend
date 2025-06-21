@@ -198,13 +198,13 @@ func verbTrans(c *gin.Context) {
 }
 func setUserConfig(c *gin.Context) {
 	var Req struct {
-		ID           uint   `json:"id" binding:"required"`
-		LearnGroup   int    `json:"learn_group" binding:"required"`
-		ReviewGroup  int    `json:"review_group" binding:"required"`
-		Mode         string `json:"mode" binding:"required"`
-		BookID       int    `json:"book_id" binding:"required"`
-		Remind       string `json:"remind" binding:"required"`
-		ListenSelect *bool  `json:"listen_select" binding:"required"`
+		ID          uint                  `json:"id" binding:"required"`
+		LearnGroup  int                   `json:"learn_group" binding:"required"`
+		ReviewGroup int                   `json:"review_group" binding:"required"`
+		BookID      int                   `json:"book_id" binding:"required"`
+		WriteGroup  int                   `json:"write_group"`
+		SoundGroup  int                   `json:"sound_group"`
+		CycleConfig models.MemorySettings `json:"cycle_config" gorm:"serializer:json"`
 	}
 	if err := c.ShouldBindJSON(&Req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"err": err.Error()})

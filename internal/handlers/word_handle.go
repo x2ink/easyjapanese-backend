@@ -9,6 +9,8 @@ import (
 	"github.com/duke-git/lancet/v2/slice"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
+	"log"
+	"math"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -46,7 +48,8 @@ func (h *WordHandler) WordRoutes(router *gin.Engine) {
 		learn.GET("newword", h.getNewWord)
 		learn.POST("record/add", h.addLearnRecord)
 		learn.POST("record/update", h.updateLearnRecord)
-		learn.POST("writefrommemory", h.getWriteFromMemory)
+		learn.POST("gettodaywords", h.getTodayWords)
+		learn.POST("getoptions", h.getOptions)
 		learn.GET("review", h.getReview)
 		learn.GET("info", h.getInfo)
 	}
@@ -228,19 +231,11 @@ func (h *WordHandler) followRead(c *gin.Context) {
 		"msg": "Submitted successfully",
 	})
 }
-func getErrorCount(words []struct {
-	Id         uint `json:"id"`
-	ErrorCount int  `json:"error_count"`
-}, id uint) int {
-	for _, word := range words {
-		if word.Id == id {
-			return word.ErrorCount
-		}
-	}
-	return 0
-}
+
 func (h *WordHandler) updateLearnRecord(c *gin.Context) {
 	UserId, _ := c.Get("UserId")
+	var config models.UserConfig
+	DB.Where("user_id = ?", UserId).First(&config)
 	type wordStruct struct {
 		Error  int  ` json:"error"`
 		WordID uint ` json:"word_id"`
@@ -252,7 +247,6 @@ func (h *WordHandler) updateLearnRecord(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"err": err.Error()})
 		return
 	}
-	cycle := []int{1, 3, 5, 7, 14, 30}
 	ids := make([]uint, 0)
 	for _, word := range Req.Words {
 		ids = append(ids, word.WordID)
@@ -261,24 +255,31 @@ func (h *WordHandler) updateLearnRecord(c *gin.Context) {
 	midnight := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 	dayTimestamp := midnight.Unix()
 	records := make([]models.LearnRecord, 0)
-	DB.Preload("Word").Where("word_id IN ? AND user_id = ?", ids, UserId).Find(&records)
+	DB.Debug().Preload("Word").Where("word_id IN ? AND user_id = ?", ids, UserId).Find(&records)
 	base := 86400
 	for _, record := range records {
 		result, _ := slice.FindBy(Req.Words, func(i int, f wordStruct) bool { return f.WordID == record.WordID })
 		errorCount := result.Error
 		reviewCount := record.ReviewCount
 		if errorCount == 0 {
-			reviewTime := cycle[reviewCount] * base
+			reviewTime := config.CycleConfig.Cycle[reviewCount] * base
 			record.ReviewCount = 1 + reviewCount
 			record.ReviewTime = dayTimestamp + int64(reviewTime)
+			log.Println(reviewTime / base)
 		} else {
 			reviewTime := 0
 			if errorCount >= 6 {
-				reviewTime = 1 * base
+				//forgotten
+				reviewTime = int(math.Ceil((1-float64(config.CycleConfig.Extent.Forgotten)*0.01)*float64(config.CycleConfig.Cycle[reviewCount]))) * base
 			} else if errorCount >= 3 {
-				reviewTime = 2 * base
+				//vague
+				reviewTime = int(math.Ceil((1-float64(config.CycleConfig.Extent.Vague)*0.01)*float64(config.CycleConfig.Cycle[reviewCount]))) * base
 			} else {
-				reviewTime = 3 * base
+				//partial
+				reviewTime = int(math.Ceil((1-float64(config.CycleConfig.Extent.Partial)*0.01)*float64(config.CycleConfig.Cycle[reviewCount]))) * base
+			}
+			if reviewTime == 0 {
+				reviewTime = 1 * base
 			}
 			record.ReviewTime = dayTimestamp + int64(reviewTime)
 		}
@@ -311,16 +312,34 @@ func (h *WordHandler) getInfo(c *gin.Context) {
 	now := time.Now()
 	midnight := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 	dayTimestamp := midnight.Unix()
-	for k, v := range learnRecords {
+	dayGroups := make([]models.LearnRecord, 0)
+	DB.Debug().Order("created_at desc").Where("user_id = ?", UserId).Group("created_at").Find(&dayGroups)
+	for k, v := range dayGroups {
 		timestamp := time.Date(v.CreatedAt.Year(), v.CreatedAt.Month(), v.CreatedAt.Day(), 0, 0, 0, 0, v.CreatedAt.Location()).Unix()
 		diffDays := int((dayTimestamp - timestamp) / 86400)
 		// 判断是否连续
+		log.Println(k)
 		if k == 0 && diffDays == 0 {
 			day = 1
-		} else if diffDays == k+1 {
-			day++
+		} else if k == 0 && diffDays == 1 {
+			day = 1
 		} else {
-			break
+			log.Println(k, diffDays)
+			//第一个是不是今天
+			onetimestamp := time.Date(dayGroups[0].CreatedAt.Year(), dayGroups[0].CreatedAt.Month(), dayGroups[0].CreatedAt.Day(), 0, 0, 0, 0, dayGroups[0].CreatedAt.Location()).Unix()
+			if onetimestamp == dayTimestamp {
+				if diffDays == k {
+					day++
+				} else {
+					break
+				}
+			} else {
+				if diffDays == k+1 {
+					day++
+				} else {
+					break
+				}
+			}
 		}
 	}
 	var userConfig models.UserConfig
@@ -357,6 +376,7 @@ func (h *WordHandler) getInfo(c *gin.Context) {
 	DB.Model(&models.LearnRecord{}).Where("created_at<? and created_at>?", todayEnd, todayStart).Count(&dayLearn)
 	c.JSON(http.StatusOK, gin.H{
 		"data": gin.H{
+			"learnt":     len(learnRecords),
 			"day_review": dayReview,
 			"day_learn":  dayLearn,
 			"wordnum":    len(wordids),
@@ -403,10 +423,50 @@ func (h *WordHandler) getReview(c *gin.Context) {
 		"msg":   "Successfully obtained",
 	})
 }
-func (h *WordHandler) getWriteFromMemory(c *gin.Context) {
+func (h *WordHandler) getOptions(c *gin.Context) {
 	var Req struct {
-		Remove []uint `json:"remove"`
+		Filter []uint `json:"filter"`
+		Limit  int    `json:"limit"`
 	}
+	if err := c.ShouldBindJSON(&Req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"err": err.Error()})
+		return
+	}
+	words := make([]models.Jcdict, 0)
+	query := DB.Order("RAND()").Preload("Meaning")
+	if len(Req.Filter) > 0 {
+		query.Where("id not in ?", Req.Filter).Limit(Req.Limit).Find(&words)
+	} else {
+		query.Limit(Req.Limit).Find(&words)
+	}
+	result := make([]WordInfo, 0)
+	for _, word := range words {
+		wordinfo := WordInfo{
+			ID:       word.ID,
+			Word:     word.Word,
+			Tone:     word.Tone,
+			Rome:     word.Rome,
+			Browse:   word.Browse,
+			Voice:    word.Voice,
+			Kana:     word.Kana,
+			Wordtype: word.Wordtype,
+			Detail:   word.Detail,
+			Meaning:  word.Meaning,
+			Example:  word.Example,
+		}
+		result = append(result, wordinfo)
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"data": result,
+		"msg":  "Successfully obtained",
+	})
+}
+func (h *WordHandler) getTodayWords(c *gin.Context) {
+	var Req struct {
+		Filter []uint `json:"filter"`
+		Type   string
+	}
+	var limit = 0
 	if err := c.ShouldBindJSON(&Req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"err": err.Error()})
 		return
@@ -414,14 +474,22 @@ func (h *WordHandler) getWriteFromMemory(c *gin.Context) {
 	UserId, _ := c.Get("UserId")
 	var config models.UserConfig
 	DB.First(&config, "user_id = ?", UserId)
+	if Req.Type == "sound" {
+		limit = config.SoundGroup
+	} else if Req.Type == "write" {
+		limit = config.WriteGroup
+	}
 	words := make([]models.LearnRecord, 0)
 	result := make([]WordInfo, 0)
 	todayStart := time.Now().Truncate(24 * time.Hour)
 	todayEnd := todayStart.Add(24*time.Hour - 1*time.Second)
 	query := DB.Debug().Order("id desc").Preload("Word.Meaning").Preload("Word.Example").
 		Where("created_at BETWEEN ? AND ?", todayStart.Format("2006-01-02 15:04:05"), todayEnd.Format("2006-01-02 15:04:05"))
-	if len(Req.Remove) > 0 {
-		query.Where("word_id not in ?", Req.Remove).Limit(config.WriteGroup).Find(&words)
+	if len(Req.Filter) > 0 {
+		query = query.Where("word_id not in ?", Req.Filter)
+	}
+	if limit == 0 {
+		query.Find(&words)
 	} else {
 		query.Limit(config.WriteGroup).Find(&words)
 	}
