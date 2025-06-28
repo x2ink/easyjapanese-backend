@@ -12,6 +12,7 @@ type LearnRecord struct {
 	ReviewCount int    `gorm:"column:review_count;default:0" json:"review_count"`
 	Word        Jcdict `gorm:"foreignKey:WordID" json:"word"`
 	User        Users  `gorm:"foreignKey:UserID" json:"user"`
+	Done        bool   `gorm:"default:false" json:"done"`
 }
 
 func (LearnRecord) TableName() string {

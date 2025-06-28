@@ -26,7 +26,7 @@ func main() {
 		MaxAge:       12 * time.Hour,
 	}))
 	handlers.Execute(router)
-	if err := router.Run(); err != nil {
+	if err := router.Run("0.0.0.0:8080"); err != nil {
 		return
 	}
 }

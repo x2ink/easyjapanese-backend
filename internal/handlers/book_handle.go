@@ -6,9 +6,9 @@ import (
 	"easyjapanese/internal/models"
 	"errors"
 	"fmt"
+	"github.com/duke-git/lancet/v2/slice"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
-	"log"
 	"net/http"
 	"strconv"
 	"time"
@@ -31,8 +31,8 @@ func (h *BookHandler) BookRoutes(router *gin.Engine) {
 	//加入单词本
 	v2 := router.Group("/book/word").Use(middleware.User())
 	v2.POST("", h.addWord)
-	v2.GET("/:id/:page/:size/:val", h.getWordList)
-	v2.GET("/:id/:page/:size", h.getWordList)
+	v2.GET("/:id/:tab/:page/:size/:val", h.getWordList)
+	v2.GET("/:id/:tab/:page/:size", h.getWordList)
 	v2.DELETE("/:bookid", h.delWords)
 	v2.DELETE("/:bookid/:wordid", h.delWord)
 }
@@ -95,34 +95,8 @@ func (h *BookHandler) setBook(c *gin.Context) {
 		return
 	}
 }
-
-func (h *BookHandler) getWordList(c *gin.Context) {
-	id, _ := strconv.Atoi(c.Param("id"))
-	page, err := strconv.Atoi(c.Param("page"))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"err": "The page format is incorrect"})
-		return
-	}
-	size, err := strconv.Atoi(c.Param("size"))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"err": "The size format is incorrect"})
-		return
-	}
-	val := c.Param("val")
+func handleWordBookRelation(words []models.WordBookRelation) []JcdictRes {
 	result := make([]JcdictRes, 0)
-	words := make([]models.WordBookRelation, 0)
-	var total int64
-	if val == "" {
-		DB.Preload("Word.Meaning").Where("book_id = ?", id).Limit(size).Offset(size * (page - 1)).Find(&words)
-		DB.Model(models.WordBookRelation{}).Where("book_id = ?", id).Count(&total)
-	} else {
-		searchTerm := fmt.Sprintf("%%%s%%", val)
-		tempIDs := make([]uint, 0)
-		DB.Debug().Model(models.Jcdict{}).Where("word LIKE ? or kana LIKE ?", searchTerm, searchTerm).Pluck("id", &tempIDs)
-		log.Println(tempIDs, searchTerm)
-		DB.Preload("Word.Meaning").Where("book_id = ? and word_id in ?", id, tempIDs).Limit(size).Offset(size * (page - 1)).Find(&words)
-		DB.Model(models.WordBookRelation{}).Where("book_id = ? and word_id in ?", id, tempIDs).Count(&total)
-	}
 	for _, v := range words {
 		meanings := make([]string, 0)
 		for _, meaning := range v.Word.Meaning {
@@ -136,6 +110,65 @@ func (h *BookHandler) getWordList(c *gin.Context) {
 			Meaning: meanings,
 		})
 	}
+	return result
+}
+func (h *BookHandler) getWordList(c *gin.Context) {
+	id, _ := strconv.Atoi(c.Param("id"))
+	tab, _ := strconv.Atoi(c.Param("tab"))
+	page, _ := strconv.Atoi(c.Param("page"))
+	size, _ := strconv.Atoi(c.Param("size"))
+	val := c.Param("val")
+	UserId, _ := c.Get("UserId")
+	result := make([]JcdictRes, 0)
+	words := make([]models.WordBookRelation, 0)
+	userConfig := &models.UserConfig{}
+	DB.Model(&models.UserConfig{}).Where("user_id = ?", UserId).First(&userConfig)
+	tempIDs := make([]uint, 0)
+	var total int64 = 0
+	ids := make([]uint, 0)
+	if val == "" {
+		//不是搜索
+		if tab == 0 {
+			DB.Preload("Word.Meaning").Where("book_id = ?", id).Limit(size).Offset(size * (page - 1)).Find(&words)
+			DB.Model(models.WordBookRelation{}).Where("book_id = ?", id).Count(&total)
+		} else if tab == 1 {
+			DB.Model(&models.LearnRecord{}).Select("word_id").Where("user_id = ?", UserId).Find(&ids)
+			DB.Preload("Word.Meaning").Where("word_book_relation.book_id = ? and word_id not in ?", id, ids).Limit(size).Offset(size * (page - 1)).Find(&words)
+			DB.Model(models.WordBookRelation{}).Where("book_id = ? and word_id not in ?", id, ids).Count(&total)
+		} else if tab == 3 {
+			DB.Model(&models.LearnRecord{}).Select("word_id").Where("user_id = ? and done is false", UserId).Find(&ids)
+			DB.Preload("Word.Meaning").Where("word_book_relation.book_id = ? and word_id in ?", id, ids).Limit(size).Offset(size * (page - 1)).Find(&words)
+			DB.Model(models.WordBookRelation{}).Where("book_id = ? and word_id in ?", id, ids).Count(&total)
+		} else if tab == 2 {
+			DB.Model(&models.LearnRecord{}).Select("word_id").Where("user_id = ? and done is true", UserId).Find(&ids)
+			DB.Preload("Word.Meaning").Where("word_book_relation.book_id = ? and word_id in ?", id, ids).Limit(size).Offset(size * (page - 1)).Find(&words)
+			DB.Model(models.WordBookRelation{}).Where("book_id = ? and word_id in ?", id, ids).Count(&total)
+		}
+	} else {
+		//搜索
+		searchTerm := fmt.Sprintf("%%%s%%", val)
+		DB.Model(models.Jcdict{}).Where("word LIKE ? or kana LIKE ?", searchTerm, searchTerm).Pluck("id", &tempIDs)
+		if tab == 0 {
+			DB.Preload("Word.Meaning").Where("book_id = ? and word_id in ?", id, tempIDs).Limit(size).Offset(size * (page - 1)).Find(&words)
+			DB.Model(models.WordBookRelation{}).Where("book_id = ? and word_id in ?", id, tempIDs).Count(&total)
+		} else if tab == 1 {
+			DB.Model(&models.LearnRecord{}).Select("word_id").Where("user_id = ?", UserId).Find(&ids)
+			DB.Preload("Word.Meaning").Where("book_id = ? and word_id in ? and word_id not in ?", id, tempIDs, ids).Limit(size).Offset(size * (page - 1)).Find(&words)
+			DB.Model(models.WordBookRelation{}).Where("book_id = ? and word_id in ? and word_id not in ?", id, tempIDs, ids).Count(&total)
+		} else if tab == 3 {
+			DB.Model(&models.LearnRecord{}).Select("word_id").Where("user_id = ? and done is false", UserId).Find(&ids)
+			intersection := slice.Intersection(ids, tempIDs)
+			DB.Preload("Word.Meaning").Where("word_book_relation.book_id = ? and word_id in ?", id, intersection).Limit(size).Offset(size * (page - 1)).Find(&words)
+			DB.Model(models.WordBookRelation{}).Where("book_id = ? and word_id in ?", id, ids).Count(&total)
+		} else if tab == 2 {
+			DB.Model(&models.LearnRecord{}).Select("word_id").Where("user_id = ? and done is true", UserId).Find(&ids)
+			intersection := slice.Intersection(ids, tempIDs)
+			DB.Preload("Word.Meaning").Where("word_book_relation.book_id = ? and word_id in ?", id, intersection).Limit(size).Offset(size * (page - 1)).Find(&words)
+			DB.Model(models.WordBookRelation{}).Where("book_id = ? and word_id in ?", id, ids).Count(&total)
+
+		}
+	}
+	result = handleWordBookRelation(words)
 	c.JSON(http.StatusOK, gin.H{
 		"data":  result,
 		"total": total,

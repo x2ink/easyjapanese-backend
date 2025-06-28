@@ -20,3 +20,6 @@ App；H5网页；微信小程序
 > - 数据库：mysql，redis；
 > - AI提供支持平台：deepseek；
 > - 开发工具：hbuilder，pycharm，vscode，datagrip等；
+### 执行命令
+
+GOOS=linux GOARCH=amd64 go build -o backend

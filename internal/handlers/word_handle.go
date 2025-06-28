@@ -18,14 +18,6 @@ import (
 )
 
 type WordHandler struct{}
-type wordBookRes struct {
-	Name     string `json:"name"`
-	Category string `json:"category"`
-	Icon     string `json:"icon"`
-	Words    int    `json:"words"`
-	ID       uint   `json:"id"`
-	Describe string `json:"describe"`
-}
 
 func (h *WordHandler) WordRoutes(router *gin.Engine) {
 	router.POST("/followread", middleware.User(), h.followRead)
@@ -282,6 +274,9 @@ func (h *WordHandler) updateLearnRecord(c *gin.Context) {
 				reviewTime = 1 * base
 			}
 			record.ReviewTime = dayTimestamp + int64(reviewTime)
+		}
+		if reviewCount > config.CycleConfig.Cycle[len(config.CycleConfig.Cycle)-1] {
+			record.Done = true
 		}
 		DB.Save(&record)
 	}
