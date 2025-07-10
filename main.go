@@ -3,15 +3,28 @@ package main
 import (
 	"easyjapanese/db"
 	"easyjapanese/internal/handlers"
+	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"time"
+
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
-	"net/http"
-	"time"
 )
 
 func main() {
 	db.InitMysql()
 	db.InitRedis()
+	// 配置开发环境和生产环境
+	// gin.SetMode(gin.ReleaseMode) // 生产环境
+	gin.SetMode(gin.DebugMode) // 开发环境
+	fmt.Println(gin.Mode())
+	if gin.Mode() == gin.ReleaseMode {
+		// 确保启用控制台和文件日志
+		f, _ := os.Create("gin.log")
+		gin.DefaultWriter = io.MultiWriter(f)
+	}
 	router := gin.Default()
 	router.Static("/file", "./file")
 	router.OPTIONS("/*any", func(c *gin.Context) {

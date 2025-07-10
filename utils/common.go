@@ -7,13 +7,14 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"github.com/golang-jwt/jwt/v5"
-	"golang.org/x/text/encoding/simplifiedchinese"
-	"golang.org/x/text/transform"
 	"io/ioutil"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/golang-jwt/jwt/v5"
+	"golang.org/x/text/encoding/simplifiedchinese"
+	"golang.org/x/text/transform"
 )
 
 func EncryptionPassword(password string) string {
@@ -51,7 +52,7 @@ type Token struct {
 func EncryptToken(data Token) string {
 	jsonData, _ := json.Marshal(data)
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.RegisteredClaims{
-		ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour * config.TokenExpireTime)),
+		ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour * time.Duration(config.TokenExpireTime))),
 		Issuer:    string(jsonData),
 	})
 	ss, _ := token.SignedString([]byte(config.Salt))

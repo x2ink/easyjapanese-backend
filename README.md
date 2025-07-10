@@ -23,3 +23,10 @@ App；H5网页；微信小程序
 ### 执行命令
 
 GOOS=linux GOARCH=amd64 go build -o backend
+
+### 执行linux命令
+
+systemctl status easyjapanese
+systemctl stop easyjapanese
+systemctl start easyjapanese
+systemctl enable easyjapanese

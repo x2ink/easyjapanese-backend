@@ -6,15 +6,16 @@ import (
 	"easyjapanese/internal/models"
 	"errors"
 	"fmt"
-	"github.com/duke-git/lancet/v2/slice"
-	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
 	"log"
 	"math"
 	"net/http"
 	"regexp"
 	"strconv"
 	"time"
+
+	"github.com/duke-git/lancet/v2/slice"
+	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 type WordHandler struct{}
@@ -283,14 +284,6 @@ func (h *WordHandler) updateLearnRecord(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"msg": "Record successful"})
 }
-func contains[T comparable](slice []T, target T) bool {
-	for _, v := range slice {
-		if v == target {
-			return true
-		}
-	}
-	return false
-}
 
 type BookInfo struct {
 	Name     string      `json:"name"`
@@ -303,43 +296,59 @@ func (h *WordHandler) getInfo(c *gin.Context) {
 	UserId, _ := c.Get("UserId")
 	learnRecords := make([]models.LearnRecord, 0)
 	DB.Order("created_at desc").Where("user_id = ?", UserId).Find(&learnRecords)
+	// 判断日期是否连续
 	day := 0
 	now := time.Now()
 	midnight := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 	dayTimestamp := midnight.Unix()
-	dayGroups := make([]models.LearnRecord, 0)
-	DB.Debug().Order("created_at desc").Where("user_id = ?", UserId).Group("created_at").Find(&dayGroups)
-	for k, v := range dayGroups {
-		timestamp := time.Date(v.CreatedAt.Year(), v.CreatedAt.Month(), v.CreatedAt.Day(), 0, 0, 0, 0, v.CreatedAt.Location()).Unix()
-		diffDays := int((dayTimestamp - timestamp) / 86400)
-		// 判断是否连续
-		log.Println(k)
-		if k == 0 && diffDays == 0 {
-			day = 1
-		} else if k == 0 && diffDays == 1 {
-			day = 1
-		} else {
-			log.Println(k, diffDays)
-			//第一个是不是今天
-			onetimestamp := time.Date(dayGroups[0].CreatedAt.Year(), dayGroups[0].CreatedAt.Month(), dayGroups[0].CreatedAt.Day(), 0, 0, 0, 0, dayGroups[0].CreatedAt.Location()).Unix()
-			if onetimestamp == dayTimestamp {
-				if diffDays == k {
-					day++
-				} else {
-					break
-				}
+	dayGroups := make([]time.Time, 0)
+	var dayReview int64 = 0
+	var dayLearn int64 = 0
+	todayStart := time.Now().Truncate(24 * time.Hour)
+	todayEnd := todayStart.Add(24*time.Hour - 1*time.Second)
+	year, month, _ := now.Date()
+	dates := make([]string, 0)
+	for k, v := range learnRecords {
+		if v.CreatedAt.Year() == year || v.CreatedAt.Month() == month {
+			dates = slice.AppendIfAbsent(dates, v.CreatedAt.Format("01-02"))
+		}
+		if v.UpdatedAt.Before(todayEnd) && v.UpdatedAt.After(todayStart) && !v.UpdatedAt.Equal(v.CreatedAt) {
+			dayReview++
+		}
+		if v.CreatedAt.Before(todayEnd) && v.CreatedAt.After(todayStart) {
+			dayLearn++
+		}
+		if slice.Contain(dayGroups, v.CreatedAt) {
+			dayGroups = append(dayGroups, v.CreatedAt)
+			timestamp := time.Date(v.CreatedAt.Year(), v.CreatedAt.Month(), v.CreatedAt.Day(), 0, 0, 0, 0, v.CreatedAt.Location()).Unix()
+			diffDays := int((dayTimestamp - timestamp) / 86400)
+			// 判断是否连续
+			if k == 0 && diffDays == 0 {
+				day = 1
+			} else if k == 0 && diffDays == 1 {
+				day = 1
 			} else {
-				if diffDays == k+1 {
-					day++
+				//第一个是不是今天
+				onetimestamp := time.Date(dayGroups[0].Year(), dayGroups[0].Month(), dayGroups[0].Day(), 0, 0, 0, 0, dayGroups[0].Location()).Unix()
+				if onetimestamp == dayTimestamp {
+					if diffDays == k {
+						day++
+					} else {
+						break
+					}
 				} else {
-					break
+					if diffDays == k+1 {
+						day++
+					} else {
+						break
+					}
 				}
 			}
 		}
 	}
 	var userConfig models.UserConfig
-	var bookInfo BookInfo
 	DB.Where("user_id = ?", UserId).First(&userConfig)
+	var bookInfo BookInfo
 	DB.Model(models.WordBook{}).First(&bookInfo, userConfig.BookID)
 	wordids := make([]uint, 0)
 	DB.Model(models.WordBookRelation{}).Where("book_id = ?", userConfig.BookID).Pluck("word_id", &wordids)
@@ -347,8 +356,6 @@ func (h *WordHandler) getInfo(c *gin.Context) {
 	review := 0
 	learn := 0
 	endOfDay := midnight.Add(23*time.Hour + 59*time.Minute + 59*time.Second)
-	todayStart := time.Now().Truncate(24 * time.Hour)
-	todayEnd := todayStart.Add(24*time.Hour - 1*time.Second)
 	for _, v := range learnRecords {
 		if v.ReviewTime < endOfDay.Unix() {
 			review++
@@ -356,19 +363,10 @@ func (h *WordHandler) getInfo(c *gin.Context) {
 		if v.CreatedAt.After(todayStart) && v.CreatedAt.Before(todayEnd) {
 			learn++
 		}
-		if contains(wordids, v.WordID) {
+		if slice.Contain(wordids, v.WordID) {
 			learnnum++
 		}
 	}
-	year, month, _ := now.Date()
-	dates := make([]string, 0)
-	DB.Model(models.LearnRecord{}).Where("YEAR(created_at) = ? AND MONTH(created_at) = ?", year, month).
-		Select("DISTINCT DATE_FORMAT(created_at, '%m-%d')").
-		Pluck("DISTINCT DATE_FORMAT(created_at, '%m-%d')", &dates)
-	var dayReview int64 = 0
-	DB.Model(&models.LearnRecord{}).Where("updated_at<? and updated_at>? and updated_at!=created_at", todayEnd, todayStart).Count(&dayReview)
-	var dayLearn int64 = 0
-	DB.Model(&models.LearnRecord{}).Where("created_at<? and created_at>?", todayEnd, todayStart).Count(&dayLearn)
 	c.JSON(http.StatusOK, gin.H{
 		"data": gin.H{
 			"learnt":     len(learnRecords),
@@ -508,11 +506,6 @@ func (h *WordHandler) getTodayWords(c *gin.Context) {
 		"data": result,
 		"msg":  "Successfully obtained",
 	})
-}
-
-type option struct {
-	Text   []string `json:"text"`
-	Answer bool     `json:"answer"`
 }
 
 func (h *WordHandler) getNewWord(c *gin.Context) {
@@ -672,7 +665,7 @@ func (h *WordHandler) jcSearch(c *gin.Context) {
 	Word := make([]models.Jcdict, 0)
 	val := c.Param("val")
 	searchTerm := fmt.Sprintf("'%s*'", val)
-	DB.Preload("Book.Book").Preload("Meaning").Select("browse", "id", "word", "kana").
+	DB.Debug().Preload("Book.Book").Preload("Meaning").Select("browse", "id", "word", "kana").
 		Where("MATCH(word,kana) AGAINST(? IN BOOLEAN MODE)", searchTerm).
 		Order("LENGTH(word)").
 		Limit(size).

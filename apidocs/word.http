@@ -1,0 +1,54 @@
+### 微信登录
+POST http://160.202.247.185:8080/wxlogin
+# POST {{host}}/wxlogin
+Content-Type: application/json
+
+{
+  "avatar": "https://thirdwx.qlogo.cn/mmopen/vi_32/POgEwh4mIHO4nibH0KlMECNjjGxQUq24ZEaGT4poC6icRiccVGKSyXwibcPq4BWmiaIGuG1icwxaQX6grC9VemZoJ8rg/132",
+  "code": "0a14IOFa1mbfUJ0tCQFa1r4wXM04IOFV",
+  "device": "devtools",
+  "nickname": "微信用户"
+}
+
+
+### 日中单词搜索
+GET {{host}}/jc/search/1/10/子供
+Authorization: {{token}}
+Content-Type: application/json
+
+
+### 获取学习信息
+GET {{host}}/learn/info
+Authorization: {{token}}
+Content-Type: application/json
+
+
+### 更新学习记录
+POST {{host}}/learn/record/update
+Authorization: {{token}}
+Content-Type: application/json
+
+{
+  "words": [
+    {
+      "error": 0,
+      "word_id": 258455
+    },
+    {
+      "error": 0,
+      "word_id": 40024
+    },
+    {
+      "error": 0,
+      "word_id": 223330
+    },
+    {
+      "error": 0,
+      "word_id": 14279
+    },
+    {
+      "error": 0,
+      "word_id": 201604
+    }
+  ]
+}
