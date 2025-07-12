@@ -17,8 +17,8 @@ func main() {
 	db.InitMysql()
 	db.InitRedis()
 	// 配置开发环境和生产环境
-	// gin.SetMode(gin.ReleaseMode) // 生产环境
-	gin.SetMode(gin.DebugMode) // 开发环境
+	gin.SetMode(gin.ReleaseMode) // 生产环境
+	// gin.SetMode(gin.DebugMode) // 开发环境
 	fmt.Println(gin.Mode())
 	if gin.Mode() == gin.ReleaseMode {
 		// 确保启用控制台和文件日志
@@ -35,7 +35,7 @@ func main() {
 	})
 
 	router.Use(cors.New(cors.Config{
-		AllowOrigins: []string{"http://192.168.0.105:5173", "http://localhost:5173", "http://172.20.10.10:5173", "http://localhost:3000"},
+		AllowOrigins: []string{"http://192.168.3.77:5173", "http://localhost:5173", "http://172.20.10.10:5173", "http://localhost:3000"},
 		MaxAge:       12 * time.Hour,
 	}))
 	handlers.Execute(router)

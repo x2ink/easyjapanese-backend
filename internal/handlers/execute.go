@@ -6,9 +6,10 @@ import (
 	"easyjapanese/internal/models"
 	"easyjapanese/utils"
 	"fmt"
-	"github.com/gin-gonic/gin"
 	"net/http"
 	"strconv"
+
+	"github.com/gin-gonic/gin"
 )
 
 func Execute(router *gin.Engine) {
@@ -42,7 +43,7 @@ func Execute(router *gin.Engine) {
 	router.GET("/grammar/list/:level/:page/:size", getGrammarList)
 	router.GET("/grammar/:id", getGrammarInfo)
 	router.GET("/unread", middleware.User(), getUnread)
-	router.GET("/ranking", middleware.User(), getRanking)
+	router.GET("/ranking", getRanking)
 	router.GET("/dailytalk/:page/:size", getDailyTalk)
 	//	随机获取谚语
 	router.GET("/sentence", getSentence)
@@ -84,7 +85,7 @@ type RankingRes struct {
 
 func getRanking(c *gin.Context) {
 	res := make([]RankingRes, 0)
-	DB.Preload("User").Select("COUNT(id) as word_count", "user_id").Model(&models.LearnRecord{}).Group("user_id").Order("word_count desc").Find(&res)
+	DB.Debug().Preload("User").Select("COUNT(id) as word_count", "user_id").Model(&models.LearnRecord{}).Group("user_id").Order("word_count desc").Find(&res)
 	c.JSON(http.StatusOK, gin.H{
 		"data": res,
 	})

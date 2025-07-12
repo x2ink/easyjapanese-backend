@@ -5,11 +5,12 @@ import (
 	"easyjapanese/internal/middleware"
 	"easyjapanese/internal/models"
 	"errors"
-	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
 	"net/http"
 	"strconv"
 	"time"
+
+	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 type NotesHandler struct{}
@@ -18,6 +19,7 @@ func (h *NotesHandler) NotesRoutes(router *gin.Engine) {
 	v1 := router.Group("/notes").Use(middleware.User())
 	v1.POST("", h.add)
 	v1.DELETE("/:id", h.del)
+	v1.DELETE("quote/:id", h.delQuote)
 	v1.GET("/info/:id", h.getInfo)
 	v1.GET("/like/:type/:id", h.like)
 	v1.GET("/list/:id/:page/:size", h.getList)
@@ -54,13 +56,13 @@ func (h *NotesHandler) getSelfList(c *gin.Context) {
 	DB.Preload("Word").Preload("Cite.User").Model(&models.Notes{}).Where("user_id= ?", UserId).Limit(size).Offset(size * (page - 1)).Find(&notes)
 	DB.Model(&models.Notes{}).Where("user_id= ?", UserId).Count(&total)
 	for _, note := range notes {
-		cite := CiteInfo{}
+		var cite CiteInfo
 		if note.Cite == nil {
 			cite = CiteInfo{}
 		} else {
 			cite = CiteInfo{
 				Content:  note.Cite.Content,
-				ID:       note.Cite.ID,
+				ID:       &note.Cite.ID,
 				Nickname: note.Cite.User.Nickname,
 			}
 		}
@@ -98,13 +100,13 @@ func (h *NotesHandler) getList(c *gin.Context) {
 	DB.Preload("Cite.User").Preload("User.Role").Model(&models.Notes{}).Where("public = ? and word_id= ?", true, id).Limit(size).Offset(size * (page - 1)).Find(&notes)
 	DB.Model(&models.Notes{}).Where("public = ? and word_id= ?", true, id).Count(&total)
 	for _, note := range notes {
-		cite := CiteInfo{}
+		var cite CiteInfo
 		if note.Cite == nil {
 			cite = CiteInfo{}
 		} else {
 			cite = CiteInfo{
 				Content:  note.Cite.Content,
-				ID:       note.Cite.ID,
+				ID:       &note.Cite.ID,
 				Nickname: note.Cite.User.Nickname,
 			}
 		}
@@ -158,7 +160,7 @@ type NoteInfo struct {
 }
 type CiteInfo struct {
 	Content  string `json:"content"`
-	ID       uint   `json:"id"`
+	ID       *uint  `json:"id"`
 	Nickname string `json:"nickname"`
 }
 
@@ -184,20 +186,47 @@ func (h *NotesHandler) getInfo(c *gin.Context) {
 		for _, meaning := range word.Meaning {
 			meanings = append(meanings, meaning.Meaning)
 		}
-		c.JSON(http.StatusOK, gin.H{"data": NoteInfo{
-			Content: note.Content,
-			Public:  note.Public,
-			ID:      note.ID,
-			Cite: CiteInfo{
-				Content:  note.Cite.Content,
-				ID:       note.Cite.ID,
-				Nickname: note.Cite.User.Nickname,
-			},
-			Word:    word.Word,
-			Kana:    word.Kana,
-			Meaning: meanings,
-		}})
+
+		if note.Cite == nil {
+			c.JSON(http.StatusOK, gin.H{"data": NoteInfo{
+				Content: note.Content,
+				Public:  note.Public,
+				ID:      note.ID,
+				Cite: CiteInfo{
+					Content:  "",
+					ID:       nil,
+					Nickname: "",
+				},
+				Word:    word.Word,
+				Kana:    word.Kana,
+				Meaning: meanings,
+			}})
+		} else {
+			c.JSON(http.StatusOK, gin.H{"data": NoteInfo{
+				Content: note.Content,
+				Public:  note.Public,
+				ID:      note.ID,
+				Cite: CiteInfo{
+					Content:  note.Cite.Content,
+					ID:       &note.Cite.ID,
+					Nickname: note.Cite.User.Nickname,
+				},
+				Word:    word.Word,
+				Kana:    word.Kana,
+				Meaning: meanings,
+			}})
+		}
+
 	}
+}
+func (h *NotesHandler) delQuote(c *gin.Context) {
+	UserId, _ := c.Get("UserId")
+	id := c.Param("id")
+	note := models.Notes{}
+	DB.Where("id = ? and user_id = ?", id, UserId).First(&note)
+	note.CiteID = nil // 删除引用
+	DB.Save(&note)    // 保存更改
+	c.JSON(http.StatusOK, gin.H{"msg": "Deleted successfully"})
 }
 func (h *NotesHandler) del(c *gin.Context) {
 	UserId, _ := c.Get("UserId")
@@ -223,7 +252,7 @@ func (h *NotesHandler) add(c *gin.Context) {
 	note.WordID = Req.WordID
 	note.UserID = UserId.(uint)
 	note.Public = Req.Public
-	note.CiteID = Req.CiteID
+	note.CiteID = &Req.CiteID
 	DB.Save(&note)
 	c.JSON(http.StatusOK, gin.H{"msg": "Submited successfully"})
 }

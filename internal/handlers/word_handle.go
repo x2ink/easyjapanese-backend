@@ -360,25 +360,29 @@ func (h *WordHandler) getInfo(c *gin.Context) {
 		if v.ReviewTime < endOfDay.Unix() {
 			review++
 		}
-		if v.CreatedAt.After(todayStart) && v.CreatedAt.Before(todayEnd) {
-			learn++
-		}
 		if slice.Contain(wordids, v.WordID) {
 			learnnum++
 		}
 	}
 	c.JSON(http.StatusOK, gin.H{
 		"data": gin.H{
-			"learnt":     len(learnRecords),
+			// 一共学习的单词
+			"learnt": len(learnRecords),
+			// 今日复习
 			"day_review": dayReview,
-			"day_learn":  dayLearn,
-			"wordnum":    len(wordids),
-			"review":     review,
-			"learn":      learn,
-			"learnnum":   learnnum,
-			"day":        day,
-			"book_info":  bookInfo,
-			"dates":      dates,
+			// 今日新学
+			"day_learn": dayLearn,
+			// 选择的单词书数量
+			"wordnum": len(wordids),
+			// 等待复习的单词
+			"review": review,
+			// 今日学习的单词
+			"learn": learn,
+			// 选择的单词书学习的单词数量
+			"learnnum":  learnnum,
+			"day":       day,
+			"book_info": bookInfo,
+			"dates":     dates,
 		},
 	})
 }

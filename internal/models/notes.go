@@ -11,7 +11,7 @@ type Notes struct {
 	Content string `gorm:"type:text" json:"content"`
 	Public  bool   `gorm:"default:false" json:"public"`
 	Like    int    `json:"like" gorm:"default:0"`
-	CiteID  uint   `json:"cite_id" gorm:"default:0"`
+	CiteID  *uint  `json:"cite_id" gorm:"default:0"`
 	Cite    *Notes `gorm:"foreignKey:CiteID" json:"cite"`
 }
 
