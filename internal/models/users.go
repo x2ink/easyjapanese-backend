@@ -9,9 +9,7 @@ type Users struct {
 	ID       uint   `json:"id"`
 	Nickname string `gorm:"default:'默认昵称'"`
 	Email    string
-	Password string
-	Wx       string
-	Qq       string
+	OpenID   string
 	Os       string
 	Device   string
 	Ip       string

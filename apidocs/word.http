@@ -1,7 +1,43 @@
+### 获取日中词典单词列表
+GET {{host}}/jc/list?page=1&pageSize=10&val=子供
+Authorization: {{token}}
+Content-Type: application/json
+
+
+### 获取单词详情
+GET {{host}}/jc/info?id=30033
+Authorization: {{token}}
+Content-Type: application/json
+
+
+### 获取跟读列表
+GET {{host}}/read?page=1&pageSize=10&id=152807
+Authorization: {{token}}
+Content-Type: application/json
+
+
+### 点赞
+POST {{host}}/like
+Authorization: {{token}}
+Content-Type: application/json
+
+{
+  "type": "read",
+  "id": 20
+}
+
+
+### 删除引用
+DELETE {{host}}/notes/quote/1
+Authorization: {{token}}
+Content-Type: application/json
+
+
 ### 获取笔记详情
 GET {{host}}/notes/info/152807
 Authorization: {{token}}
 Content-Type: application/json
+
 
 ### 排行榜
 GET {{host}}/ranking

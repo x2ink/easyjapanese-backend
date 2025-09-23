@@ -1,0 +1,34 @@
+### 微信登录
+POST {{host}}/wxlogin
+Content-Type: application/json
+
+{
+  "code": "0e1Vcyll2D8Ulg4J45nl2KTuDc0Vcylu",
+  "avatar": "111",
+  "nickname": "111",
+  "os": "111",
+  "device": "111"
+}
+
+
+### 重置Token
+GET {{host}}/token?userId=30
+Authorization: {{token}}
+Content-Type: application/json
+
+
+### 获取用户信息
+GET {{host}}/user/info
+Authorization: {{token}}
+Content-Type: application/json
+
+
+### 更新用户信息
+POST {{host}}/user/info
+Authorization: {{token}}
+Content-Type: application/json
+
+{
+  "nickname": "测试昵称",
+  "email": "97400220@qq.com"
+}

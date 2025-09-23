@@ -2,8 +2,9 @@ package middleware
 
 import (
 	"easyjapanese/utils"
-	"github.com/gin-gonic/gin"
 	"net/http"
+
+	"github.com/gin-gonic/gin"
 )
 
 func User() gin.HandlerFunc {
