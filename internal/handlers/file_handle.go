@@ -2,10 +2,11 @@ package handlers
 
 import (
 	"fmt"
-	"github.com/gin-gonic/gin"
 	"net/http"
 	"os"
 	"path/filepath"
+
+	"github.com/gin-gonic/gin"
 )
 
 type FileHandler struct{}
@@ -29,5 +30,4 @@ func (h *FileHandler) upload(c *gin.Context) {
 	}
 	url := fmt.Sprintf("http://%s/file/%s", c.Request.Host, file.Filename)
 	c.JSON(http.StatusOK, gin.H{"msg": "上传成功", "data": url})
-	return
 }

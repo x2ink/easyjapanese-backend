@@ -38,15 +38,18 @@ func (h *WordHandler) WordRoutes(router *gin.Engine) {
 	// 	learn.GET("info", h.getInfo)
 	// }
 }
+
+type JapaneseDictRes struct {
+	ID       uint     `json:"id"`
+	Words    []string `json:"words"`
+	Kana     string   `json:"kana"`
+	Tone     string   `json:"tone"`
+	Rome     string   `json:"rome"`
+	Meanings string   `json:"meanings"`
+}
+
 func (h *WordHandler) jcList(c *gin.Context) {
-	type Res struct {
-		ID       uint     `json:"id"`
-		Words    []string `json:"words"`
-		Kana     string   `json:"kana"`
-		Tone     string   `json:"tone"`
-		Rome     string   `json:"rome"`
-		Meanings string   `json:"meanings"`
-	}
+
 	val := c.Query("val")
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, err := strconv.Atoi(c.DefaultQuery("pageSize", "10"))
@@ -64,9 +67,9 @@ func (h *WordHandler) jcList(c *gin.Context) {
 	}
 	db.Count(&total)
 	db.Limit(pageSize).Offset((page - 1) * pageSize).Order("LENGTH(kana) asc").Find(&wordList)
-	var result []Res
+	var result []JapaneseDictRes
 	for _, v := range wordList {
-		result = append(result, Res{
+		result = append(result, JapaneseDictRes{
 			ID:       v.ID,
 			Words:    v.Words,
 			Kana:     v.Kana,
