@@ -6,17 +6,17 @@ import (
 	"gorm.io/gorm"
 )
 
-type Example struct {
+type DictExample struct {
 	Jp string `json:"jp"`
 	Zh string `json:"zh"`
 }
 type Meaning struct {
-	Zh      string    `json:"zh"`
-	Jp      string    `json:"jp"`
-	Anti    string    `json:"anti"`
-	Note    string    `json:"note"`
-	Syns    string    `json:"syns"`
-	Example []Example `json:"example"`
+	Zh      string        `json:"zh"`
+	Jp      string        `json:"jp"`
+	Anti    string        `json:"anti"`
+	Note    string        `json:"note"`
+	Syns    string        `json:"syns"`
+	Example []DictExample `json:"example"`
 }
 type Detail struct {
 	Type     string    `json:"type"`

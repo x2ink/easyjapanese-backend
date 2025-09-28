@@ -37,72 +37,82 @@ Authorization: {{token}}
 Content-Type: application/json
 
 
-### 新增单词书
-POST {{host}}/book/add
+### 获取语法列表
+GET {{host}}/grammar/list?val=ない&page=1&pageSize=10
 Authorization: {{token}}
 Content-Type: application/json
 
-{
-  "name": "red",
-  "describe": "111",
-  "icon":"sss"
-}
-
-### 删除引用
-DELETE {{host}}/notes/quote/1
+### 获取语法详情
+GET {{host}}/grammar/info?id=41
 Authorization: {{token}}
 Content-Type: application/json
 
+# ### 新增单词书
+# POST {{host}}/book/add
+# Authorization: {{token}}
+# Content-Type: application/json
 
-### 获取笔记详情
-GET {{host}}/notes/info/152807
-Authorization: {{token}}
-Content-Type: application/json
+# {
+#   "name": "red",
+#   "describe": "111",
+#   "icon":"sss"
+# }
 
-
-### 排行榜
-GET {{host}}/ranking
-Content-Type: application/json
-
-
-### 日中单词搜索
-GET {{host}}/jc/search/1/10/子供
-Authorization: {{token}}
-Content-Type: application/json
-
-
-### 获取学习信息
-GET {{host}}/learn/info
-Authorization: {{token}}
-Content-Type: application/json
+# ### 删除引用
+# DELETE {{host}}/notes/quote/1
+# Authorization: {{token}}
+# Content-Type: application/json
 
 
-### 更新学习记录
-POST {{host}}/learn/record/update
-Authorization: {{token}}
-Content-Type: application/json
+# ### 获取笔记详情
+# GET {{host}}/notes/info/152807
+# Authorization: {{token}}
+# Content-Type: application/json
 
-{
-  "words": [
-    {
-      "error": 0,
-      "word_id": 258455
-    },
-    {
-      "error": 0,
-      "word_id": 40024
-    },
-    {
-      "error": 0,
-      "word_id": 223330
-    },
-    {
-      "error": 0,
-      "word_id": 14279
-    },
-    {
-      "error": 0,
-      "word_id": 201604
-    }
-  ]
-}
+
+# ### 排行榜
+# GET {{host}}/ranking
+# Content-Type: application/json
+
+
+# ### 日中单词搜索
+# GET {{host}}/jc/search/1/10/子供
+# Authorization: {{token}}
+# Content-Type: application/json
+
+
+# ### 获取学习信息
+# GET {{host}}/learn/info
+# Authorization: {{token}}
+# Content-Type: application/json
+
+
+# ### 更新学习记录
+# POST {{host}}/learn/record/update
+# Authorization: {{token}}
+# Content-Type: application/json
+
+# {
+#   "words": [
+#     {
+#       "error": 0,
+#       "word_id": 258455
+#     },
+#     {
+#       "error": 0,
+#       "word_id": 40024
+#     },
+#     {
+#       "error": 0,
+#       "word_id": 223330
+#     },
+#     {
+#       "error": 0,
+#       "word_id": 14279
+#     },
+#     {
+#       "error": 0,
+#       "word_id": 201604
+#     }
+#   ]
+# }

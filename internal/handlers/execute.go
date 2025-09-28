@@ -7,6 +7,7 @@ import (
 	"easyjapanese/utils"
 	"errors"
 	"net/http"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -33,13 +34,10 @@ func Execute(router *gin.Engine) {
 	router.POST("/config", middleware.User(), setUserConfig)
 	router.POST("/feedback", middleware.User(), feedback)
 	router.GET("/verbtrans", verbTrans)
-	// router.GET("/grammar/search/:page/:size/:val", searchGrammar)
-	// router.GET("/grammar/search/:page/:size", searchGrammar)
-	// router.GET("/grammar/list/:level/:page/:size", getGrammarList)
-	// router.GET("/grammar/:id", getGrammarInfo)
+	router.GET("/grammar/list", getGrammarList)
+	router.GET("/grammar/info", getGrammarInfo)
 	router.GET("/ranking", getRanking)
 	// router.GET("/dailytalk/:page/:size", getDailyTalk)
-	// //	随机获取谚语
 	router.GET("/sentence", getSentence)
 }
 
@@ -144,67 +142,60 @@ func feedback(c *gin.Context) {
 	})
 }
 
-// type GrammarRes struct {
-// 	Grammar string           `json:"grammar"`
-// 	Id      uint             `json:"id"`
-// 	Level   string           `json:"level"`
-// 	Explain string           `json:"explain"`
-// 	Example []models.Example `json:"example" gorm:"serializer:json"`
-// }
+func getGrammarInfo(c *gin.Context) {
+	var GrammarInfo struct {
+		ID          uint                    `json:"id"`
+		Grammar     string                  `json:"grammar"`
+		Level       string                  `json:"level"`
+		Connect     string                  `json:"connect"`
+		Meanings    []string                `json:"meanings" gorm:"serializer:json"`
+		Explanation []string                `json:"explanation" gorm:"serializer:json"`
+		Examples    []models.GrammarExample `json:"examples" gorm:"serializer:json"`
+	}
+	id := c.Query("id")
+	DB.Model(&models.Grammar{}).Find(&GrammarInfo, id)
+	c.JSON(http.StatusOK, gin.H{
+		"data": GrammarInfo,
+	})
+}
 
-//	func getGrammarInfo(c *gin.Context) {
-//		id := c.Param("id")
-//		result := models.Grammar{}
-//		DB.Find(&result, id)
-//		c.JSON(http.StatusOK, gin.H{
-//			"data": result,
-//		})
-//	}
-//
-//	func searchGrammar(c *gin.Context) {
-//		page, err := strconv.Atoi(c.Param("page"))
-//		if err != nil {
-//			c.JSON(http.StatusBadRequest, gin.H{"err": "The page format is incorrect"})
-//			return
-//		}
-//		size, err := strconv.Atoi(c.Param("size"))
-//		if err != nil {
-//			c.JSON(http.StatusBadRequest, gin.H{"err": "The size format is incorrect"})
-//			return
-//		}
-//		val := c.Param("val")
-//		var total int64
-//		result := make([]GrammarRes, 0)
-//		searchTerm := fmt.Sprintf("%%%s%%", val)
-//		DB.Model(&models.Grammar{}).Where("grammar like ?", searchTerm).Limit(size).Offset(size * (page - 1)).Find(&result)
-//		DB.Model(&models.Grammar{}).Where("grammar like ?", searchTerm).Count(&total)
-//		c.JSON(http.StatusOK, gin.H{
-//			"data":  result,
-//			"total": total,
-//		})
-//	}
-//
-//	func getGrammarList(c *gin.Context) {
-//		page, err := strconv.Atoi(c.Param("page"))
-//		if err != nil {
-//			c.JSON(http.StatusBadRequest, gin.H{"err": "The page format is incorrect"})
-//			return
-//		}
-//		size, err := strconv.Atoi(c.Param("size"))
-//		if err != nil {
-//			c.JSON(http.StatusBadRequest, gin.H{"err": "The size format is incorrect"})
-//			return
-//		}
-//		level := c.Param("level")
-//		var total int64
-//		result := make([]GrammarRes, 0)
-//		DB.Model(&models.Grammar{}).Where("level = ?", level).Limit(size).Offset(size * (page - 1)).Find(&result)
-//		DB.Model(&models.Grammar{}).Where("level = ?", level).Count(&total)
-//		c.JSON(http.StatusOK, gin.H{
-//			"data":  result,
-//			"total": total,
-//		})
-//	}
+func getGrammarList(c *gin.Context) {
+	type GrammarRes struct {
+		ID       uint     `json:"id"`
+		Grammar  string   `json:"grammar"`
+		Level    string   `json:"level"`
+		Connect  string   `json:"connect"`
+		Meanings []string `json:"meanings" gorm:"serializer:json"`
+	}
+	page, err := strconv.Atoi(c.Query("page"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"err": "The pageSize format is incorrect"})
+		return
+	}
+	pageSize, err := strconv.Atoi(c.Query("pageSize"))
+	if err != nil || pageSize < 1 || pageSize > 100 {
+		pageSize = 10
+	}
+	val := c.Query("val")
+	level := c.Query("level")
+	db := DB.Model(&models.Grammar{})
+	var total int64
+	result := make([]GrammarRes, 0)
+	if val == "" {
+		db = db.Where("level = ?", level)
+		db.Limit(pageSize).Offset(pageSize * (page - 1)).Find(&result)
+		db.Count(&total)
+	} else {
+		db = db.Where("MATCH(grammar) AGAINST (? IN BOOLEAN MODE)", val)
+		db.Limit(pageSize).Offset(pageSize * (page - 1)).Find(&result)
+		db.Count(&total)
+
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"data":  result,
+		"total": total,
+	})
+}
 func verbTrans(c *gin.Context) {
 	word := c.Query("word")
 	res := utils.VerbTransfiguration(word)
