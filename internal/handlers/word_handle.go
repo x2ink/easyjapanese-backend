@@ -6,6 +6,7 @@ import (
 	"easyjapanese/internal/models"
 	"easyjapanese/utils"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"time"
@@ -68,7 +69,7 @@ func (h *WordHandler) review(c *gin.Context) {
 
 	UserId, _ := c.Get("UserId")
 	reviewProgress := models.ReviewProgress{}
-	result := DB.Where("user_id = ? and word_id = ?", UserId, Req.WordId).First(&reviewProgress).Error
+	result := DB.Where("user_id = ? and word_id = ?", UserId, Req.WordId).Order("id DESC").First(&reviewProgress).Error
 	if errors.Is(result, gorm.ErrRecordNotFound) {
 		t := time.Now()
 		todayZero := time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location())
@@ -78,9 +79,11 @@ func (h *WordHandler) review(c *gin.Context) {
 		reviewProgress.UserID = UserId.(uint)
 		DB.Create(&reviewProgress)
 	} else {
+		fmt.Print(reviewProgress.ID)
 		info := utils.Review(Req.Quality, reviewProgress.Easiness, reviewProgress.Interval, reviewProgress.Repetitions, reviewProgress.NextReviewDate)
 		updateReviewProgress(&reviewProgress, info, Req.Quality)
-		DB.Save(&reviewProgress)
+		reviewProgress.ID = 0
+		DB.Create(&reviewProgress)
 	}
 	c.JSON(200, gin.H{})
 
