@@ -4,6 +4,7 @@ import (
 	. "easyjapanese/db"
 	"easyjapanese/internal/middleware"
 	"easyjapanese/internal/models"
+	"easyjapanese/utils"
 	"errors"
 	"net/http"
 	"strconv"
@@ -21,6 +22,10 @@ func (h *WordHandler) WordRoutes(router *gin.Engine) {
 		jc.GET("/list", h.jcList)
 		jc.GET("/info", h.jcInfo)
 	}
+	router.POST("/review", middleware.User(), h.review)
+	router.GET("/learn", middleware.User(), h.getNewWord)
+	router.GET("/review", middleware.User(), h.getReviewWord)
+
 	router.POST("/read", middleware.User(), h.addRead)
 	router.GET("/read", h.getFollowRead)
 	router.POST("/edit", middleware.User(), h.editWord)
@@ -46,6 +51,46 @@ type JapaneseDictRes struct {
 	Tone     string   `json:"tone"`
 	Rome     string   `json:"rome"`
 	Meanings string   `json:"meanings"`
+}
+
+func (h *WordHandler) getReviewWord(c *gin.Context) {
+
+}
+func (h *WordHandler) review(c *gin.Context) {
+	var Req struct {
+		WordId  int `json:"word_id"`
+		Quality int `json:"quality"`
+	}
+	if err := c.ShouldBindJSON(&Req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"err": err.Error()})
+		return
+	}
+
+	UserId, _ := c.Get("UserId")
+	reviewProgress := models.ReviewProgress{}
+	result := DB.Where("user_id = ? and word_id = ?", UserId, Req.WordId).First(&reviewProgress).Error
+	if errors.Is(result, gorm.ErrRecordNotFound) {
+		t := time.Now()
+		todayZero := time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location())
+		info := utils.FirstReview(Req.Quality, todayZero)
+		updateReviewProgress(&reviewProgress, info, Req.Quality)
+		reviewProgress.WordID = Req.WordId
+		reviewProgress.UserID = UserId.(uint)
+		DB.Create(&reviewProgress)
+	} else {
+		info := utils.Review(Req.Quality, reviewProgress.Easiness, reviewProgress.Interval, reviewProgress.Repetitions, reviewProgress.NextReviewDate)
+		updateReviewProgress(&reviewProgress, info, Req.Quality)
+		DB.Save(&reviewProgress)
+	}
+	c.JSON(200, gin.H{})
+
+}
+func updateReviewProgress(rp *models.ReviewProgress, info utils.ReviewResult, quality int) {
+	rp.Easiness = info.Easiness
+	rp.Interval = info.Interval
+	rp.Repetitions = info.Repetitions
+	rp.Quality = quality
+	rp.NextReviewDate = info.ReviewDateTime
 }
 
 func (h *WordHandler) jcList(c *gin.Context) {
@@ -475,60 +520,50 @@ func (h *WordHandler) addRead(c *gin.Context) {
 // 	})
 // }
 
-// func (h *WordHandler) getNewWord(c *gin.Context) {
-// 	UserId, _ := c.Get("UserId")
-// 	var config models.UserConfig
-// 	DB.First(&config, "user_id = ?", UserId)
-// 	wordbooks := make([]models.WordBookRelation, 0)
-// 	result := make([]WordInfo, 0)
-// 	DB.Preload("Word.Meaning").Preload("Word.Example").Joins("LEFT JOIN learn_record lr ON lr.word_id = word_book_relation.word_id").
-// 		Where("lr.word_id IS NULL AND word_book_relation.book_id = ?", config.BookID).
-// 		Order("word_book_relation.id DESC").
-// 		Limit(config.LearnGroup).
-// 		Find(&wordbooks)
-// 	for _, word := range wordbooks {
-// 		wordinfo := WordInfo{
-// 			ID:       word.Word.ID,
-// 			Word:     word.Word.Word,
-// 			Tone:     word.Word.Tone,
-// 			Rome:     word.Word.Rome,
-// 			Browse:   word.Word.Browse,
-// 			Voice:    word.Word.Voice,
-// 			Kana:     word.Word.Kana,
-// 			Wordtype: word.Word.Wordtype,
-// 			Detail:   word.Word.Detail,
-// 			Meaning:  word.Word.Meaning,
-// 			Example:  word.Word.Example,
-// 		}
-// 		result = append(result, wordinfo)
-// 	}
-// 	c.JSON(http.StatusOK, gin.H{
-// 		"data":  result,
-// 		"total": len(result),
-// 		"msg":   "Successfully obtained",
-// 	})
-// }
+func (h *WordHandler) getNewWord(c *gin.Context) {
+	UserId, _ := c.Get("UserId")
+	var config models.UserConfig
+	DB.First(&config, "user_id = ?", UserId)
+	wordbooks := make([]models.WordBooksRelation, 0)
+	result := make([]WordInfo, 0)
+	DB.Preload("Word").Joins("LEFT JOIN review_progress lp ON lp.word_id = word_books_relation.word_id").
+		Where("lp.word_id IS NULL AND word_books_relation.book_id = ?", config.BookID).
+		Order("word_books_relation.id DESC").
+		Limit(config.LearnGroup).
+		Find(&wordbooks)
+	for _, word := range wordbooks {
+		wordinfo := WordInfo{
+			ID:        word.Word.ID,
+			Words:     word.Word.Words,
+			Tone:      word.Word.Tone,
+			Rome:      word.Word.Rome,
+			Browse:    word.Word.Browse,
+			Detail:    word.Word.Detail,
+			Kana:      word.Word.Kana,
+			UpdatedAt: word.Word.UpdatedAt,
+		}
+		result = append(result, wordinfo)
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"data":  result,
+		"total": len(result),
+		"msg":   "Successfully obtained",
+	})
+}
 
-// type JcdictRes struct {
-// 	Word    string   `json:"word"`
-// 	Kana    string   `json:"kana"`
-// 	ID      uint     `json:"id"`
-// 	Browse  int      `json:"browse"`
-// 	Meaning []string `json:"meaning"`
-// 	Book    []string `json:"book"`
-// }
+type WordInfo struct {
+	ID        uint            `json:"id"`
+	Words     []string        `json:"words" gorm:"serializer:json"`
+	Kana      string          `json:"kana"`
+	Tone      string          `json:"tone"`
+	Rome      string          `json:"rome"`
+	Detail    []models.Detail `json:"icon" gorm:"serializer:json"`
+	UpdatedAt time.Time       `json:"updated_at"`
+	Browse    uint            `json:"browse"`
+}
 
 func (h *WordHandler) jcInfo(c *gin.Context) {
-	var wordInfo struct {
-		ID        uint            `json:"id"`
-		Words     []string        `json:"words" gorm:"serializer:json"`
-		Kana      string          `json:"kana"`
-		Tone      string          `json:"tone"`
-		Rome      string          `json:"rome"`
-		Detail    []models.Detail `json:"icon" gorm:"serializer:json"`
-		UpdatedAt time.Time       `json:"updated_at"`
-		Browse    uint            `json:"browse"`
-	}
+	var wordInfo WordInfo
 	id, err := strconv.Atoi(c.Query("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"err": "The id format is incorrect"})

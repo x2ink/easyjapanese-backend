@@ -26,10 +26,12 @@ Content-Type: application/json
   "id": 20
 }
 
+
 ### 获取单词书
 GET {{host}}/book/list
 Authorization: {{token}}
 Content-Type: application/json
+
 
 ### 获取单词书的单词列表
 GET {{host}}/word/list?id=1&tab=0&page=1&pageSize=10
@@ -42,10 +44,28 @@ GET {{host}}/grammar/list?val=ない&page=1&pageSize=10
 Authorization: {{token}}
 Content-Type: application/json
 
+
 ### 获取语法详情
 GET {{host}}/grammar/info?id=41
 Authorization: {{token}}
 Content-Type: application/json
+
+
+### 获取新单词
+GET {{host}}/learn
+Authorization: {{token}}
+Content-Type: application/json
+
+### 学习&复习单词
+POST {{host}}/review
+Authorization: {{token}}
+Content-Type: application/json
+
+{
+  "word_id":66003,
+  "quality":3
+}
+
 
 # ### 新增单词书
 # POST {{host}}/book/add
