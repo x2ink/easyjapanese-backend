@@ -89,7 +89,7 @@ func wxGetToken(user models.Users, c *gin.Context) {
 		UserId: user.ID,
 	}
 	token := utils.EncryptToken(tokenData)
-	c.JSON(http.StatusOK, gin.H{"msg": "Successful login", "data": token})
+	c.JSON(http.StatusOK, gin.H{"data": token})
 }
 
 func (h *UserHandler) setUserInfo(c *gin.Context) {
@@ -110,7 +110,7 @@ func (h *UserHandler) setUserInfo(c *gin.Context) {
 		user.Nickname = Req.Nickname
 		user.Avatar = Req.Avatar
 		DB.Debug().Save(&user)
-		c.JSON(http.StatusOK, gin.H{"msg": "Update success"})
+		c.Status(http.StatusOK)
 	}
 }
 func (h *UserHandler) resetToken(c *gin.Context) {
@@ -120,7 +120,7 @@ func (h *UserHandler) resetToken(c *gin.Context) {
 	err := DB.Select("role_id", "id").First(&user, UserId).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		c.JSON(http.StatusNotFound, gin.H{
-			"msg": "Id does not exist",
+			"err": "Id does not exist",
 		})
 		return
 	}
@@ -132,11 +132,11 @@ func (h *UserHandler) resetToken(c *gin.Context) {
 				UserId: user.ID,
 			}
 			token := utils.EncryptToken(tokenData)
-			c.JSON(http.StatusResetContent, gin.H{"msg": "Successful reset", "data": token})
+			c.JSON(http.StatusResetContent, gin.H{"data": token})
 			return
 		}
 		c.JSON(http.StatusUnauthorized, gin.H{
-			"msg": "Authentication failed",
+			"err": "Authentication failed",
 		})
 		return
 	} else {
@@ -145,7 +145,7 @@ func (h *UserHandler) resetToken(c *gin.Context) {
 			UserId: user.ID,
 		}
 		token := utils.EncryptToken(tokenData)
-		c.JSON(http.StatusOK, gin.H{"msg": "Successful reset", "data": token})
+		c.JSON(http.StatusOK, gin.H{"data": token})
 		return
 	}
 }
@@ -156,14 +156,14 @@ func (h *UserHandler) getSimpleUserInfo(c *gin.Context) {
 	err := DB.Preload("Role").Select("created_at", "nickname", "email", "avatar", "ip", "role_id", "id").First(&User, UserId).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		c.JSON(http.StatusNotFound, gin.H{
-			"msg": "User does not exist",
+			"err": "User does not exist",
 		})
 		return
 	}
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"err": "Address acquisition failed"})
 	}
-	c.JSON(http.StatusOK, gin.H{"msg": "Successfully obtained", "data": map[string]interface{}{
+	c.JSON(http.StatusOK, gin.H{"data": map[string]interface{}{
 		"id":         User.ID,
 		"nickname":   User.Nickname,
 		"email":      User.Email,

@@ -9,7 +9,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/duke-git/lancet/v2/slice"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
@@ -99,12 +98,12 @@ func handleWordBookRelation(words []models.WordBooksRelation) []JapaneseDictRes 
 	result := make([]JapaneseDictRes, 0)
 	for _, v := range words {
 		result = append(result, JapaneseDictRes{
-			ID:       v.Word.ID,
-			Words:    v.Word.Words,
-			Kana:     v.Word.Kana,
-			Rome:     v.Word.Rome,
-			Tone:     v.Word.Tone,
-			Meanings: v.Word.Meanings,
+			ID:          v.Word.ID,
+			Words:       v.Word.Words,
+			Kana:        v.Word.Kana,
+			Rome:        v.Word.Rome,
+			Tone:        v.Word.Tone,
+			Description: v.Word.Description,
 		})
 	}
 	return result
@@ -113,13 +112,14 @@ func (h *BookHandler) getWordList(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Query("id"))
 	tab, _ := strconv.Atoi(c.DefaultQuery("tab", "0"))
 	page, _ := strconv.Atoi(c.Query("page"))
-	size, _ := strconv.Atoi(c.Query("pageSize"))
+	size, _ := strconv.Atoi(c.Query("page_size"))
 	if size <= 0 || size > 100 {
 		size = 20
 	}
 	val := c.Query("val")
 	UserId, _ := c.Get("UserId")
 	offset := (page - 1) * size
+	// 搜索到的单词列表
 	var wordIDs []uint
 	var useWordIDs bool
 	if val != "" {
@@ -133,21 +133,24 @@ func (h *BookHandler) getWordList(c *gin.Context) {
 		useWordIDs = true
 	}
 	var notInIDs, inIDs []uint
+	baseQuery := DB.Model(&models.WordBooksRelation{}).Where("book_id = ?", id)
 	switch tab {
 	case 1: // 未学习
-		DB.Model(&models.LearnRecord{}).
+		DB.Model(&models.ReviewProgress{}).
 			Where("user_id = ?", UserId).
 			Pluck("word_id", &notInIDs)
+		baseQuery = baseQuery.Where("word_id NOT IN ?", notInIDs)
 	case 2: // 已掌握
-		DB.Model(&models.LearnRecord{}).
+		DB.Model(&models.ReviewProgress{}).
 			Where("user_id = ? AND done = ?", UserId, true).
 			Pluck("word_id", &inIDs)
+		baseQuery = baseQuery.Where("word_id IN ?", inIDs)
 	case 3: // 学习中
-		DB.Model(&models.LearnRecord{}).
+		DB.Model(&models.ReviewProgress{}).
 			Where("user_id = ? AND done = ?", UserId, false).
 			Pluck("word_id", &inIDs)
+		baseQuery = baseQuery.Where("word_id IN ?", inIDs)
 	}
-	baseQuery := DB.Model(&models.WordBooksRelation{}).Where("book_id = ?", id)
 	if useWordIDs {
 		if len(wordIDs) == 0 {
 			c.JSON(http.StatusOK, gin.H{"data": []interface{}{}, "total": 0})
@@ -155,19 +158,15 @@ func (h *BookHandler) getWordList(c *gin.Context) {
 		}
 		baseQuery = baseQuery.Where("word_id IN ?", wordIDs)
 	}
-	if len(notInIDs) > 0 {
-		baseQuery = baseQuery.Where("word_id NOT IN ?", notInIDs)
-	}
-	if len(inIDs) > 0 {
-		if useWordIDs {
-			inIDs = slice.Intersection(inIDs, wordIDs)
-			if len(inIDs) == 0 {
-				c.JSON(http.StatusOK, gin.H{"data": []interface{}{}, "total": 0})
-				return
-			}
-		}
-		baseQuery = baseQuery.Where("word_id IN ?", inIDs)
-	}
+	// if len(inIDs) > 0 {
+	// 	if useWordIDs {
+	// 		inIDs = slice.Intersection(inIDs, wordIDs)
+	// 		if len(inIDs) == 0 {
+	// 			c.JSON(http.StatusOK, gin.H{"data": []interface{}{}, "total": 0})
+	// 			return
+	// 		}
+	// 	}
+	// }
 	var total int64
 	baseQuery.Count(&total)
 	var relations []models.WordBooksRelation
@@ -301,7 +300,7 @@ type PublicBookRes struct {
 	Current   bool      `json:"current"`
 	LearnNum  int       `json:"learn_num"`
 	WordNum   int       `json:"word_num"`
-	Icon      string    `json:"icon" gorm:"serializer:json"`
+	Icon      string    `json:"icon"`
 	CreatedAt time.Time `json:"created_at"`
 	Status    int       `json:"status"`
 	UserID    uint      `json:"user_id"`
@@ -319,7 +318,6 @@ func (h *BookHandler) getWordBookList(c *gin.Context) {
 		}
 	}
 	c.JSON(http.StatusOK, gin.H{
-		"msg":  "Successfully obtained",
 		"data": result,
 	})
 }

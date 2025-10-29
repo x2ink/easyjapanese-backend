@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/duke-git/lancet/v2/slice"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
@@ -31,7 +32,8 @@ func (h *WordHandler) WordRoutes(router *gin.Engine) {
 	router.GET("/read", h.getFollowRead)
 	router.POST("/edit", middleware.User(), h.editWord)
 	router.GET("/edit", h.getEditWord)
-	router.GET("recommend", h.recommendWord)
+	router.GET("/recommend", h.recommendWord)
+	router.GET("/homeinfo", middleware.User(), h.getInfo)
 	// //学习单词
 	// learn := router.Group("/learn").Use(middleware.User())
 	// {
@@ -46,12 +48,12 @@ func (h *WordHandler) WordRoutes(router *gin.Engine) {
 }
 
 type JapaneseDictRes struct {
-	ID       uint     `json:"id"`
-	Words    []string `json:"words"`
-	Kana     string   `json:"kana"`
-	Tone     string   `json:"tone"`
-	Rome     string   `json:"rome"`
-	Meanings string   `json:"meanings"`
+	ID          uint     `json:"id"`
+	Words       []string `json:"words"`
+	Kana        string   `json:"kana"`
+	Tone        string   `json:"tone"`
+	Rome        string   `json:"rome"`
+	Description string   `json:"description"`
 }
 
 func (h *WordHandler) getReviewWord(c *gin.Context) {
@@ -59,8 +61,8 @@ func (h *WordHandler) getReviewWord(c *gin.Context) {
 }
 func (h *WordHandler) review(c *gin.Context) {
 	var Req struct {
-		WordId  int `json:"word_id"`
-		Quality int `json:"quality"`
+		WordId  uint `json:"word_id"`
+		Quality int  `json:"quality"`
 	}
 	if err := c.ShouldBindJSON(&Req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"err": err.Error()})
@@ -100,7 +102,7 @@ func (h *WordHandler) jcList(c *gin.Context) {
 
 	val := c.Query("val")
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
-	pageSize, err := strconv.Atoi(c.DefaultQuery("pageSize", "10"))
+	pageSize, err := strconv.Atoi(c.DefaultQuery("page_size", "10"))
 	if err != nil || page < 1 {
 		page = 1
 	}
@@ -109,7 +111,7 @@ func (h *WordHandler) jcList(c *gin.Context) {
 	}
 	var wordList = make([]models.JapaneseDict, 0)
 	var total int64 = 0
-	db := DB.Model(&models.JapaneseDict{}).Select("words", "tone", "rome", "kana", "id", "detail")
+	db := DB.Model(&models.JapaneseDict{}).Select("words", "tone", "rome", "kana", "id", "description")
 	if val != "" {
 		db = db.Where("MATCH(search_text) AGAINST(? IN NATURAL LANGUAGE MODE)", val)
 	}
@@ -118,12 +120,12 @@ func (h *WordHandler) jcList(c *gin.Context) {
 	var result []JapaneseDictRes
 	for _, v := range wordList {
 		result = append(result, JapaneseDictRes{
-			ID:       v.ID,
-			Words:    v.Words,
-			Kana:     v.Kana,
-			Rome:     v.Rome,
-			Tone:     v.Tone,
-			Meanings: v.Meanings,
+			ID:          v.ID,
+			Words:       v.Words,
+			Kana:        v.Kana,
+			Rome:        v.Rome,
+			Tone:        v.Tone,
+			Description: v.Description,
 		})
 	}
 	c.JSON(http.StatusOK, gin.H{
@@ -156,23 +158,23 @@ func (h *WordHandler) getEditWord(c *gin.Context) {
 
 func (h *WordHandler) editWord(c *gin.Context) {
 	var Req struct {
-		WordID  uint   `json:"word_id"`
-		Detail  string `json:"detail"`
-		Meaning string `json:"meaning"`
-		Example string `json:"example"`
+		WordID   uint   `json:"word_id"`
+		Detail   string `json:"detail"`
+		Meaning  string `json:"meaning"`
+		Examples string `json:"examples"`
 	}
-	UserId, _ := c.Get("UserId")
+	// UserId, _ := c.Get("UserId")
 	if err := c.ShouldBindJSON(&Req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"err": err.Error()})
 		return
 	}
-	DB.Create(&models.WordEdit{
-		UserID:  UserId.(uint),
-		Detail:  Req.Detail,
-		Meaning: Req.Meaning,
-		Example: Req.Example,
-		WordID:  Req.WordID,
-	})
+	// DB.Create(&models.WordEdit{
+	// 	UserID:  UserId.(uint),
+	// 	Detail:  Req.Detail,
+	// 	Meaning: Req.Meaning,
+	// 	Examples: Req.Examples,
+	// 	WordID:  Req.WordID,
+	// })
 	c.JSON(http.StatusOK, gin.H{
 		"msg": "Submitted successfully",
 	})
@@ -296,107 +298,107 @@ func (h *WordHandler) addRead(c *gin.Context) {
 // 	c.JSON(http.StatusOK, gin.H{"msg": "Record successful"})
 // }
 
-// type BookInfo struct {
-// 	Name     string      `json:"name"`
-// 	ID       uint        `json:"id"`
-// 	Describe string      `json:"describe"`
-// 	Icon     models.Icon `json:"icon" gorm:"serializer:json"`
-// }
+type BookInfo struct {
+	Name     string `json:"name"`
+	ID       uint   `json:"id"`
+	Describe string `json:"describe"`
+	Icon     string `json:"icon"`
+}
 
-// func (h *WordHandler) getInfo(c *gin.Context) {
-// 	UserId, _ := c.Get("UserId")
-// 	learnRecords := make([]models.LearnRecord, 0)
-// 	DB.Order("created_at desc").Where("user_id = ?", UserId).Find(&learnRecords)
-// 	// 判断日期是否连续
-// 	day := 0
-// 	now := time.Now()
-// 	midnight := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
-// 	dayTimestamp := midnight.Unix()
-// 	dayGroups := make([]time.Time, 0)
-// 	var dayReview int64 = 0
-// 	var dayLearn int64 = 0
-// 	todayStart := time.Now().Truncate(24 * time.Hour)
-// 	todayEnd := todayStart.Add(24*time.Hour - 1*time.Second)
-// 	year, month, _ := now.Date()
-// 	dates := make([]string, 0)
-// 	for k, v := range learnRecords {
-// 		if v.CreatedAt.Year() == year || v.CreatedAt.Month() == month {
-// 			dates = slice.AppendIfAbsent(dates, v.CreatedAt.Format("01-02"))
-// 		}
-// 		if v.UpdatedAt.Before(todayEnd) && v.UpdatedAt.After(todayStart) && !v.UpdatedAt.Equal(v.CreatedAt) {
-// 			dayReview++
-// 		}
-// 		if v.CreatedAt.Before(todayEnd) && v.CreatedAt.After(todayStart) {
-// 			dayLearn++
-// 		}
-// 		if slice.Contain(dayGroups, v.CreatedAt) {
-// 			dayGroups = append(dayGroups, v.CreatedAt)
-// 			timestamp := time.Date(v.CreatedAt.Year(), v.CreatedAt.Month(), v.CreatedAt.Day(), 0, 0, 0, 0, v.CreatedAt.Location()).Unix()
-// 			diffDays := int((dayTimestamp - timestamp) / 86400)
-// 			// 判断是否连续
-// 			if k == 0 && diffDays == 0 {
-// 				day = 1
-// 			} else if k == 0 && diffDays == 1 {
-// 				day = 1
-// 			} else {
-// 				//第一个是不是今天
-// 				onetimestamp := time.Date(dayGroups[0].Year(), dayGroups[0].Month(), dayGroups[0].Day(), 0, 0, 0, 0, dayGroups[0].Location()).Unix()
-// 				if onetimestamp == dayTimestamp {
-// 					if diffDays == k {
-// 						day++
-// 					} else {
-// 						break
-// 					}
-// 				} else {
-// 					if diffDays == k+1 {
-// 						day++
-// 					} else {
-// 						break
-// 					}
-// 				}
-// 			}
-// 		}
-// 	}
-// 	var userConfig models.UserConfig
-// 	DB.Where("user_id = ?", UserId).First(&userConfig)
-// 	var bookInfo BookInfo
-// 	DB.Model(models.WordBook{}).First(&bookInfo, userConfig.BookID)
-// 	wordids := make([]uint, 0)
-// 	DB.Model(models.WordBookRelation{}).Where("book_id = ?", userConfig.BookID).Pluck("word_id", &wordids)
-// 	learnnum := 0
-// 	review := 0
-// 	learn := 0
-// 	endOfDay := midnight.Add(23*time.Hour + 59*time.Minute + 59*time.Second)
-// 	for _, v := range learnRecords {
-// 		if v.ReviewTime < endOfDay.Unix() {
-// 			review++
-// 		}
-// 		if slice.Contain(wordids, v.WordID) {
-// 			learnnum++
-// 		}
-// 	}
-// 	c.JSON(http.StatusOK, gin.H{
-// 		"data": gin.H{
-// 			// 一共学习的单词
-// 			"learnt": len(learnRecords),
-// 			// 今日复习
-// 			"day_review": dayReview,
-// 			// 今日新学
-// 			"day_learn": dayLearn,
-// 			// 选择的单词书数量
-// 			"wordnum": len(wordids),
-// 			// 等待复习的单词
-// 			"review": review,
-// 			// 今日学习的单词
-// 			"learn": learn,
-// 			// 选择的单词书学习的单词数量
-// 			"learnnum":  learnnum,
-// 			"day":       day,
-// 			"book_info": bookInfo,
-// 			"dates":     dates,
-// 		},
-// 	})
-// }
+func (h *WordHandler) getInfo(c *gin.Context) {
+	UserId, _ := c.Get("UserId")
+	learnRecords := make([]models.ReviewProgress, 0)
+	DB.Order("created_at desc").Where("user_id = ?", UserId).Find(&learnRecords)
+	// 判断日期是否连续
+	day := 0
+	now := time.Now()
+	midnight := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	dayTimestamp := midnight.Unix()
+	dayGroups := make([]time.Time, 0)
+	var dayReview int64 = 0
+	var dayLearn int64 = 0
+	todayStart := time.Now().Truncate(24 * time.Hour)
+	todayEnd := todayStart.Add(24*time.Hour - 1*time.Second)
+	year, month, _ := now.Date()
+	dates := make([]string, 0)
+	for k, v := range learnRecords {
+		if v.CreatedAt.Year() == year || v.CreatedAt.Month() == month {
+			dates = slice.AppendIfAbsent(dates, v.CreatedAt.Format("01-02"))
+		}
+		if v.UpdatedAt.Before(todayEnd) && v.UpdatedAt.After(todayStart) && !v.UpdatedAt.Equal(v.CreatedAt) {
+			dayReview++
+		}
+		if v.CreatedAt.Before(todayEnd) && v.CreatedAt.After(todayStart) {
+			dayLearn++
+		}
+		if slice.Contain(dayGroups, v.CreatedAt) {
+			dayGroups = append(dayGroups, v.CreatedAt)
+			timestamp := time.Date(v.CreatedAt.Year(), v.CreatedAt.Month(), v.CreatedAt.Day(), 0, 0, 0, 0, v.CreatedAt.Location()).Unix()
+			diffDays := int((dayTimestamp - timestamp) / 86400)
+			// 判断是否连续
+			if k == 0 && diffDays == 0 {
+				day = 1
+			} else if k == 0 && diffDays == 1 {
+				day = 1
+			} else {
+				//第一个是不是今天
+				onetimestamp := time.Date(dayGroups[0].Year(), dayGroups[0].Month(), dayGroups[0].Day(), 0, 0, 0, 0, dayGroups[0].Location()).Unix()
+				if onetimestamp == dayTimestamp {
+					if diffDays == k {
+						day++
+					} else {
+						break
+					}
+				} else {
+					if diffDays == k+1 {
+						day++
+					} else {
+						break
+					}
+				}
+			}
+		}
+	}
+	var userConfig models.UserConfig
+	DB.Where("user_id = ?", UserId).First(&userConfig)
+	var bookInfo BookInfo
+	DB.Model(models.WordBook{}).First(&bookInfo, userConfig.BookID)
+	wordids := make([]uint, 0)
+	DB.Model(models.WordBooksRelation{}).Where("book_id = ?", userConfig.BookID).Pluck("word_id", &wordids)
+	learnnum := 0
+	review := 0
+	learn := 0
+	endOfDay := midnight.Add(23*time.Hour + 59*time.Minute + 59*time.Second)
+	for _, v := range learnRecords {
+		if v.NextReviewDate.Unix() < endOfDay.Unix() {
+			review++
+		}
+		if slice.Contain(wordids, v.WordID) {
+			learnnum++
+		}
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"data": gin.H{
+			// 一共学习的单词
+			"learnt": len(learnRecords),
+			// 今日复习
+			"day_review": dayReview,
+			// 今日新学
+			"day_learn": dayLearn,
+			// 选择的单词书数量
+			"wordnum": len(wordids),
+			// 等待复习的单词
+			"review": review,
+			// 今日学习的单词
+			"learn": learn,
+			// 选择的单词书学习的单词数量
+			"learnnum":  learnnum,
+			"day":       day,
+			"book_info": bookInfo,
+			"dates":     dates,
+		},
+	})
+}
 
 // func (h *WordHandler) getReview(c *gin.Context) {
 // 	UserId, _ := c.Get("UserId")
@@ -555,14 +557,15 @@ func (h *WordHandler) getNewWord(c *gin.Context) {
 }
 
 type WordInfo struct {
-	ID        uint            `json:"id"`
-	Words     []string        `json:"words" gorm:"serializer:json"`
-	Kana      string          `json:"kana"`
-	Tone      string          `json:"tone"`
-	Rome      string          `json:"rome"`
-	Detail    []models.Detail `json:"icon" gorm:"serializer:json"`
-	UpdatedAt time.Time       `json:"updated_at"`
-	Browse    uint            `json:"browse"`
+	ID          uint            `json:"id"`
+	Words       []string        `json:"words" gorm:"serializer:json"`
+	Kana        string          `json:"kana"`
+	Tone        string          `json:"tone"`
+	Rome        string          `json:"rome"`
+	Detail      []models.Detail `json:"detail" gorm:"serializer:json"`
+	UpdatedAt   time.Time       `json:"updated_at"`
+	Browse      uint            `json:"browse"`
+	Description string          `json:"description"`
 }
 
 func (h *WordHandler) jcInfo(c *gin.Context) {
@@ -575,13 +578,12 @@ func (h *WordHandler) jcInfo(c *gin.Context) {
 	result := DB.Model(models.JapaneseDict{}).First(&wordInfo, id).Error
 	if errors.Is(result, gorm.ErrRecordNotFound) {
 		c.JSON(http.StatusNotFound, gin.H{
-			"msg": "Word does not exist",
+			"err": "Word does not exist",
 		})
 		return
 	}
 	DB.Model(&models.JapaneseDict{Model: gorm.Model{ID: wordInfo.ID}}).Update("browse", wordInfo.Browse+1)
 	c.JSON(http.StatusOK, gin.H{
-		"msg":  "Successfully obtained",
 		"data": wordInfo,
 	})
 }

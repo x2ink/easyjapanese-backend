@@ -23,7 +23,7 @@ func Execute(router *gin.Engine) {
 	Userhandler.UserRoutes(router)
 	Wordhandler := &WordHandler{}
 	Wordhandler.WordRoutes(router)
-	router.POST("/like", like)
+	router.POST("/like", middleware.User(), like)
 	Filehandler := &FileHandler{}
 	Filehandler.FileRoutes(router)
 	Bookhandler := &BookHandler{}
@@ -55,6 +55,7 @@ func like(c *gin.Context) {
 	var Req struct {
 		ID   uint   `json:"id"  binding:"required"`
 		Type string `json:"type"  binding:"required"`
+		Like bool   `json:"like"`
 	}
 	if err := c.ShouldBindJSON(&Req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"err": err.Error()})
@@ -68,11 +69,13 @@ func like(c *gin.Context) {
 				"err": "Id not exits",
 			})
 		} else {
-			readData.Like += 1
+			if Req.Like {
+				readData.Like += 1
+			} else {
+				readData.Like -= 1
+			}
 			DB.Save(&readData)
-			c.JSON(http.StatusOK, gin.H{
-				"msg": "Like successful",
-			})
+			c.JSON(http.StatusOK, gin.H{})
 		}
 	}
 }
@@ -223,9 +226,7 @@ func setUserConfig(c *gin.Context) {
 		return
 	}
 	DB.Model(&models.UserConfig{ID: Req.ID}).Updates(&Req)
-	c.JSON(http.StatusOK, gin.H{
-		"msg": "update success",
-	})
+	c.Status(http.StatusOK)
 }
 
 func getUserConfig(c *gin.Context) {
@@ -234,6 +235,5 @@ func getUserConfig(c *gin.Context) {
 	DB.Preload("Book").First(&config, "user_id = ?", UserId)
 	c.JSON(http.StatusOK, gin.H{
 		"data": config,
-		"msg":  "Successfully obtained",
 	})
 }

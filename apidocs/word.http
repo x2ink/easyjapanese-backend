@@ -56,16 +56,22 @@ GET {{host}}/learn
 Authorization: {{token}}
 Content-Type: application/json
 
+
 ### 学习&复习单词
 POST {{host}}/review
 Authorization: {{token}}
 Content-Type: application/json
 
 {
-  "word_id":66003,
-  "quality":3
+  "word_id": 66003,
+  "quality": 5
 }
 
+
+### 获取首页信息
+GET {{host}}/homeinfo
+Authorization: {{token}}
+Content-Type: application/json
 
 # ### 新增单词书
 # POST {{host}}/book/add
