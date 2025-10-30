@@ -19,15 +19,24 @@ func (h *BookHandler) BookRoutes(router *gin.Engine) {
 	v1 := router.Group("/book").Use(middleware.User())
 	v1.POST("/add", h.addBook)
 	v1.GET("/list", h.getWordBookList)
+	v1.GET("/word", h.getContainBook)
 	v1.POST("/info", h.setBook)
 	v1.POST("/release", h.release)
 	v1.POST("/delete", h.delBook)
-	v2 := router.Group("/word")
+	v2 := router.Group("/word").Use(middleware.User())
 	v2.POST("/add", h.addWord)
 	v2.GET("/list", h.getWordList)
 	v2.POST("/delete", h.delWords)
 }
-
+func (h *BookHandler) getContainBook(c *gin.Context) {
+	wordId := c.Query("wordId")
+	UserId, _ := c.Get("UserId")
+	var ids []uint
+	DB.Debug().Model(&models.WordBooksRelation{}).Where("word_id=? and user_id=?", wordId, UserId).Pluck("book_id", &ids)
+	c.JSON(http.StatusOK, gin.H{
+		"data": ids,
+	})
+}
 func (h *BookHandler) release(c *gin.Context) {
 	var Req struct {
 		ID uint `json:"id" binding:"required"`
@@ -64,7 +73,7 @@ func (h *BookHandler) setBook(c *gin.Context) {
 		ID       uint   `json:"id" binding:"required"`
 		Name     string `json:"name" binding:"required"`
 		Describe string `json:"describe" binding:"required"`
-		Icon     string `json:"icon" binding:"required"`
+		Icon     string `json:"icon"`
 	}
 	if err := c.ShouldBindJSON(&Req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"err": err.Error()})
@@ -222,15 +231,15 @@ func (h *BookHandler) delBook(c *gin.Context) {
 
 func (h *BookHandler) delWords(c *gin.Context) {
 	UserId, _ := c.Get("UserId")
-	bookid, _ := strconv.Atoi(c.Query("bookid"))
 	var Req struct {
-		IDs []int `json:"ids"`
+		BookId int   `json:"book_id"`
+		IDs    []int `json:"ids"`
 	}
 	if err := c.ShouldBindJSON(&Req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"err": err.Error()})
 		return
 	}
-	DB.Where("user_id = ? and word_id in ? and book_id = ?", UserId, Req.IDs, bookid).Delete(&models.WordBooksRelation{})
+	DB.Where("user_id = ? and word_id in ? and book_id = ?", UserId, Req.IDs, Req.BookId).Delete(&models.WordBooksRelation{})
 	c.JSON(http.StatusOK, gin.H{
 		"msg": "Deleted successfully",
 	})
@@ -265,13 +274,19 @@ func (h *BookHandler) addBook(c *gin.Context) {
 	var Req struct {
 		Name     string `json:"name" binding:"required"`
 		Describe string `json:"describe" binding:"required"`
-		Icon     string `json:"icon" binding:"required"`
+		Icon     string `json:"icon"`
 	}
 	if err := c.ShouldBindJSON(&Req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"err": err.Error()})
 		return
 	}
 	UserId, _ := c.Get("UserId")
+	var count int64
+	DB.Model(&models.WordBook{}).Where("user_id=?", UserId).Count(&count)
+	if count > 5 {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 4002})
+		return
+	}
 	result := DB.Where("name = ? and user_id = ?", Req.Name, UserId.(uint)).First(&models.WordBook{})
 	if errors.Is(result.Error, gorm.ErrRecordNotFound) {
 		DB.Create(&models.WordBook{
@@ -282,12 +297,10 @@ func (h *BookHandler) addBook(c *gin.Context) {
 			Tag:      "自制",
 			Category: "自制",
 		})
-		c.JSON(http.StatusOK, gin.H{
-			"msg": "Submitted successfully",
-		})
+		c.JSON(http.StatusOK, gin.H{})
 		return
 	} else {
-		c.JSON(http.StatusBadRequest, gin.H{"msg": "Word book noun repetition", "code": 4001})
+		c.JSON(http.StatusBadRequest, gin.H{"code": 4001})
 		return
 	}
 }
@@ -311,7 +324,7 @@ func (h *BookHandler) getWordBookList(c *gin.Context) {
 	config := models.UserConfig{}
 	DB.Where("user_id=?", UserId).First(&config)
 	result := make([]PublicBookRes, 0)
-	DB.Model(&models.WordBook{}).Select("word_books.*,COUNT(DISTINCT user_config.user_id) AS learn_num,COUNT(DISTINCT word_books_relation.id) AS word_num").Joins("left join user_config ON word_books.id = user_config.book_id").Joins("left join word_books_relation ON word_books.id = word_books_relation.book_id").Where("word_books.status=1 or word_books.user_id = ?", UserId).Group("word_books.id").Order("word_books.id desc").Find(&result)
+	DB.Model(&models.WordBook{}).Select("word_books.*,COUNT(DISTINCT user_config.user_id) AS learn_num,COUNT(DISTINCT word_books_relation.id) AS word_num").Joins("left join user_config ON word_books.id = user_config.book_id").Joins("left join word_books_relation ON word_books.id = word_books_relation.book_id and word_books_relation.deleted_at IS NULL").Where("word_books.status=1 or word_books.user_id = ?", UserId).Group("word_books.id").Order("word_books.id desc").Find(&result)
 	for k, item := range result {
 		if config.BookID == item.ID {
 			result[k].Current = true

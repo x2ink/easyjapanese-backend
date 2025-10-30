@@ -73,6 +73,12 @@ GET {{host}}/homeinfo
 Authorization: {{token}}
 Content-Type: application/json
 
+
+### 获取含有该单词的单词书id
+GET {{host}}/book/word?wordId=64209
+Authorization: {{token}}
+Content-Type: application/json
+
 # ### 新增单词书
 # POST {{host}}/book/add
 # Authorization: {{token}}
