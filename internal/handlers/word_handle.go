@@ -27,24 +27,12 @@ func (h *WordHandler) WordRoutes(router *gin.Engine) {
 	router.POST("/review", middleware.User(), h.review)
 	router.GET("/learn", middleware.User(), h.getNewWord)
 	router.GET("/review", middleware.User(), h.getReviewWord)
-
+	router.GET("/learnt", middleware.User(), h.getTodayWord)
+	router.POST("/learnt", middleware.User(), h.setTodayWord)
 	router.POST("/read", middleware.User(), h.addRead)
 	router.GET("/read", h.getFollowRead)
-	router.POST("/edit", middleware.User(), h.editWord)
-	router.GET("/edit", h.getEditWord)
 	router.GET("/recommend", h.recommendWord)
 	router.GET("/homeinfo", middleware.User(), h.getInfo)
-	// //学习单词
-	// learn := router.Group("/learn").Use(middleware.User())
-	// {
-	// 	learn.GET("newword", h.getNewWord)
-	// 	learn.POST("record/add", h.addLearnRecord)
-	// 	learn.POST("record/update", h.updateLearnRecord)
-	// 	learn.POST("gettodaywords", h.getTodayWords)
-	// 	learn.POST("getoptions", h.getOptions)
-	// 	learn.GET("review", h.getReview)
-	// 	learn.GET("info", h.getInfo)
-	// }
 }
 
 type JapaneseDictRes struct {
@@ -56,8 +44,95 @@ type JapaneseDictRes struct {
 	Description string   `json:"description"`
 }
 
-func (h *WordHandler) getReviewWord(c *gin.Context) {
+func (h *WordHandler) setTodayWord(c *gin.Context) {
+	var Req struct {
+		WordId uint   `json:"word_id"`
+		Type   string `json:"type"`
+	}
+	if err := c.ShouldBindJSON(&Req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"err": err.Error()})
+		return
+	}
+	now := time.Now()
+	startOfDay := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	endOfDay := startOfDay.Add(24*time.Hour - time.Nanosecond)
+	UserId, _ := c.Get("UserId")
+	word := models.ReviewProgress{}
+	result := DB.Where("(created_at BETWEEN ? AND ?) and user_id=? and word_id = ?",
+		startOfDay, endOfDay, UserId, Req.WordId).First(&word).Error
 
+	if errors.Is(result, gorm.ErrRecordNotFound) {
+		c.JSON(http.StatusBadRequest, gin.H{"err": gorm.ErrRecordNotFound.Error()})
+		return
+	}
+	switch Req.Type {
+	case "write":
+		word.Write = true
+		DB.Save(&word)
+	case "listen":
+		word.Listen = true
+		DB.Save(&word)
+	default:
+		c.JSON(http.StatusBadRequest, gin.H{"err": "未知的类型: " + Req.Type})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{})
+}
+func (h *WordHandler) getTodayWord(c *gin.Context) {
+	UserId, _ := c.Get("UserId")
+	filter := c.Query("filter")
+	reviewProgress := make([]models.ReviewProgress, 0)
+	now := time.Now()
+	startOfDay := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	endOfDay := startOfDay.Add(24*time.Hour - time.Nanosecond)
+	db := DB.Where("(created_at BETWEEN ? AND ?) and user_id=?", startOfDay, endOfDay, UserId)
+	switch filter {
+	case "write":
+		db.Where("write=?", false)
+	case "listen":
+		db.Where("listen=?", false)
+	}
+	db.Preload("Word").Limit(10).Find(&reviewProgress)
+	result := make([]WordInfo, 0)
+	for _, word := range reviewProgress {
+		wordinfo := WordInfo{
+			ID:          word.Word.ID,
+			Words:       word.Word.Words,
+			Tone:        word.Word.Tone,
+			Rome:        word.Word.Rome,
+			Browse:      word.Word.Browse,
+			Detail:      word.Word.Detail,
+			Kana:        word.Word.Kana,
+			Description: word.Word.Description,
+			UpdatedAt:   word.Word.UpdatedAt,
+		}
+		result = append(result, wordinfo)
+	}
+	c.JSON(200, gin.H{"data": result})
+}
+func (h *WordHandler) getReviewWord(c *gin.Context) {
+	UserId, _ := c.Get("UserId")
+	reviewProgress := make([]models.ReviewProgress, 0)
+	now := time.Now()
+	startOfDay := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	endOfDay := startOfDay.Add(24*time.Hour - time.Nanosecond)
+	DB.Preload("Word").Where("(next_review_date BETWEEN ? AND ?) and user_id=?", startOfDay, endOfDay, UserId).Limit(10).Find(&reviewProgress)
+	result := make([]WordInfo, 0)
+	for _, word := range reviewProgress {
+		wordinfo := WordInfo{
+			ID:          word.Word.ID,
+			Words:       word.Word.Words,
+			Tone:        word.Word.Tone,
+			Rome:        word.Word.Rome,
+			Browse:      word.Word.Browse,
+			Detail:      word.Word.Detail,
+			Kana:        word.Word.Kana,
+			Description: word.Word.Description,
+			UpdatedAt:   word.Word.UpdatedAt,
+		}
+		result = append(result, wordinfo)
+	}
+	c.JSON(200, gin.H{"data": result})
 }
 func (h *WordHandler) review(c *gin.Context) {
 	var Req struct {
@@ -134,52 +209,6 @@ func (h *WordHandler) jcList(c *gin.Context) {
 	})
 }
 
-type editWordRes struct {
-	ID      uint      `json:"id"`
-	Comment string    `gorm:"type:text" json:"comment"`
-	UserID  uint      `gorm:"column:user_id"`
-	User    userInfo  `gorm:"foreignKey:UserID" json:"user"`
-	Time    time.Time `json:"time" gorm:"column:created_at"`
-}
-
-func (h *WordHandler) getEditWord(c *gin.Context) {
-	wordId, err := strconv.Atoi(c.Param("id"))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"err": "The id format is incorrect"})
-		return
-	}
-	result := make([]editWordRes, 0)
-	DB.Model(&models.WordEdit{}).Order("id desc").Preload("User").Where("word_id = ? and status = 1", wordId).Find(&result)
-	c.JSON(http.StatusOK, gin.H{
-		"data": result,
-		"msg":  "Successfully obtained",
-	})
-}
-
-func (h *WordHandler) editWord(c *gin.Context) {
-	var Req struct {
-		WordID   uint   `json:"word_id"`
-		Detail   string `json:"detail"`
-		Meaning  string `json:"meaning"`
-		Examples string `json:"examples"`
-	}
-	// UserId, _ := c.Get("UserId")
-	if err := c.ShouldBindJSON(&Req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"err": err.Error()})
-		return
-	}
-	// DB.Create(&models.WordEdit{
-	// 	UserID:  UserId.(uint),
-	// 	Detail:  Req.Detail,
-	// 	Meaning: Req.Meaning,
-	// 	Examples: Req.Examples,
-	// 	WordID:  Req.WordID,
-	// })
-	c.JSON(http.StatusOK, gin.H{
-		"msg": "Submitted successfully",
-	})
-}
-
 type FollowReadRes struct {
 	ID     uint      `json:"id"`
 	UserID uint      `gorm:"column:user_id" json:"user_id"`
@@ -237,66 +266,6 @@ func (h *WordHandler) addRead(c *gin.Context) {
 		"msg": "Submitted successfully",
 	})
 }
-
-// func (h *WordHandler) updateLearnRecord(c *gin.Context) {
-// 	UserId, _ := c.Get("UserId")
-// 	var config models.UserConfig
-// 	DB.Where("user_id = ?", UserId).First(&config)
-// 	type wordStruct struct {
-// 		Error  int  ` json:"error"`
-// 		WordID uint ` json:"word_id"`
-// 	}
-// 	var Req struct {
-// 		Words []wordStruct `json:"words"`
-// 	}
-// 	if err := c.ShouldBindJSON(&Req); err != nil {
-// 		c.JSON(http.StatusBadRequest, gin.H{"err": err.Error()})
-// 		return
-// 	}
-// 	ids := make([]uint, 0)
-// 	for _, word := range Req.Words {
-// 		ids = append(ids, word.WordID)
-// 	}
-// 	now := time.Now()
-// 	midnight := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
-// 	dayTimestamp := midnight.Unix()
-// 	records := make([]models.LearnRecord, 0)
-// 	DB.Debug().Preload("Word").Where("word_id IN ? AND user_id = ?", ids, UserId).Find(&records)
-// 	base := 86400
-// 	for _, record := range records {
-// 		result, _ := slice.FindBy(Req.Words, func(i int, f wordStruct) bool { return f.WordID == record.WordID })
-// 		errorCount := result.Error
-// 		reviewCount := record.ReviewCount
-// 		if errorCount == 0 {
-// 			reviewTime := config.CycleConfig.Cycle[reviewCount] * base
-// 			record.ReviewCount = 1 + reviewCount
-// 			record.ReviewTime = dayTimestamp + int64(reviewTime)
-// 			log.Println(reviewTime / base)
-// 		} else {
-// 			reviewTime := 0
-// 			if errorCount >= 6 {
-// 				//forgotten
-// 				reviewTime = int(math.Ceil((1-float64(config.CycleConfig.Extent.Forgotten)*0.01)*float64(config.CycleConfig.Cycle[reviewCount]))) * base
-// 			} else if errorCount >= 3 {
-// 				//vague
-// 				reviewTime = int(math.Ceil((1-float64(config.CycleConfig.Extent.Vague)*0.01)*float64(config.CycleConfig.Cycle[reviewCount]))) * base
-// 			} else {
-// 				//partial
-// 				reviewTime = int(math.Ceil((1-float64(config.CycleConfig.Extent.Partial)*0.01)*float64(config.CycleConfig.Cycle[reviewCount]))) * base
-// 			}
-// 			if reviewTime == 0 {
-// 				reviewTime = 1 * base
-// 			}
-// 			record.ReviewTime = dayTimestamp + int64(reviewTime)
-// 		}
-// 		if reviewCount > config.CycleConfig.Cycle[len(config.CycleConfig.Cycle)-1] {
-// 			record.Done = true
-// 		}
-// 		DB.Save(&record)
-// 	}
-
-// 	c.JSON(http.StatusOK, gin.H{"msg": "Record successful"})
-// }
 
 type BookInfo struct {
 	Name     string `json:"name"`
@@ -400,131 +369,6 @@ func (h *WordHandler) getInfo(c *gin.Context) {
 	})
 }
 
-// func (h *WordHandler) getReview(c *gin.Context) {
-// 	UserId, _ := c.Get("UserId")
-// 	var config models.UserConfig
-// 	DB.First(&config, "user_id = ?", UserId)
-// 	now := time.Now()
-// 	midnight := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
-// 	endOfDay := midnight.Add(23*time.Hour + 59*time.Minute + 59*time.Second)
-// 	endOfDayTimestamp := endOfDay.Unix()
-// 	words := make([]models.LearnRecord, 0)
-// 	result := make([]WordInfo, 0)
-// 	DB.Debug().Order("id desc").Preload("Word.Meaning").Preload("Word.Example").Where("review_time < ?", endOfDayTimestamp).Limit(config.LearnGroup).Find(&words)
-// 	for _, word := range words {
-// 		wordinfo := WordInfo{
-// 			ID:       word.Word.ID,
-// 			Word:     word.Word.Word,
-// 			Tone:     word.Word.Tone,
-// 			Rome:     word.Word.Rome,
-// 			Browse:   word.Word.Browse,
-// 			Voice:    word.Word.Voice,
-// 			Kana:     word.Word.Kana,
-// 			Wordtype: word.Word.Wordtype,
-// 			Detail:   word.Word.Detail,
-// 			Meaning:  word.Word.Meaning,
-// 			Example:  word.Word.Example,
-// 		}
-// 		result = append(result, wordinfo)
-// 	}
-// 	c.JSON(http.StatusOK, gin.H{
-// 		"data":  result,
-// 		"total": len(result),
-// 		"msg":   "Successfully obtained",
-// 	})
-// }
-// func (h *WordHandler) getOptions(c *gin.Context) {
-// 	var Req struct {
-// 		Filter []uint `json:"filter"`
-// 		Limit  int    `json:"limit"`
-// 	}
-// 	if err := c.ShouldBindJSON(&Req); err != nil {
-// 		c.JSON(http.StatusBadRequest, gin.H{"err": err.Error()})
-// 		return
-// 	}
-// 	words := make([]models.Jcdict, 0)
-// 	query := DB.Order("RAND()").Preload("Meaning")
-// 	if len(Req.Filter) > 0 {
-// 		query.Where("id not in ?", Req.Filter).Limit(Req.Limit).Find(&words)
-// 	} else {
-// 		query.Limit(Req.Limit).Find(&words)
-// 	}
-// 	result := make([]WordInfo, 0)
-// 	for _, word := range words {
-// 		wordinfo := WordInfo{
-// 			ID:       word.ID,
-// 			Word:     word.Word,
-// 			Tone:     word.Tone,
-// 			Rome:     word.Rome,
-// 			Browse:   word.Browse,
-// 			Voice:    word.Voice,
-// 			Kana:     word.Kana,
-// 			Wordtype: word.Wordtype,
-// 			Detail:   word.Detail,
-// 			Meaning:  word.Meaning,
-// 			Example:  word.Example,
-// 		}
-// 		result = append(result, wordinfo)
-// 	}
-// 	c.JSON(http.StatusOK, gin.H{
-// 		"data": result,
-// 		"msg":  "Successfully obtained",
-// 	})
-// }
-// func (h *WordHandler) getTodayWords(c *gin.Context) {
-// 	var Req struct {
-// 		Filter []uint `json:"filter"`
-// 		Type   string
-// 	}
-// 	var limit = 0
-// 	if err := c.ShouldBindJSON(&Req); err != nil {
-// 		c.JSON(http.StatusBadRequest, gin.H{"err": err.Error()})
-// 		return
-// 	}
-// 	UserId, _ := c.Get("UserId")
-// 	var config models.UserConfig
-// 	DB.First(&config, "user_id = ?", UserId)
-// 	if Req.Type == "sound" {
-// 		limit = config.SoundGroup
-// 	} else if Req.Type == "write" {
-// 		limit = config.WriteGroup
-// 	}
-// 	words := make([]models.LearnRecord, 0)
-// 	result := make([]WordInfo, 0)
-// 	todayStart := time.Now().Truncate(24 * time.Hour)
-// 	todayEnd := todayStart.Add(24*time.Hour - 1*time.Second)
-// 	query := DB.Debug().Order("id desc").Preload("Word.Meaning").Preload("Word.Example").
-// 		Where("created_at BETWEEN ? AND ?", todayStart.Format("2006-01-02 15:04:05"), todayEnd.Format("2006-01-02 15:04:05"))
-// 	if len(Req.Filter) > 0 {
-// 		query = query.Where("word_id not in ?", Req.Filter)
-// 	}
-// 	if limit == 0 {
-// 		query.Find(&words)
-// 	} else {
-// 		query.Limit(config.WriteGroup).Find(&words)
-// 	}
-// 	for _, word := range words {
-// 		wordinfo := WordInfo{
-// 			ID:       word.Word.ID,
-// 			Word:     word.Word.Word,
-// 			Tone:     word.Word.Tone,
-// 			Rome:     word.Word.Rome,
-// 			Browse:   word.Word.Browse,
-// 			Voice:    word.Word.Voice,
-// 			Kana:     word.Word.Kana,
-// 			Wordtype: word.Word.Wordtype,
-// 			Detail:   word.Word.Detail,
-// 			Meaning:  word.Word.Meaning,
-// 			Example:  word.Word.Example,
-// 		}
-// 		result = append(result, wordinfo)
-// 	}
-// 	c.JSON(http.StatusOK, gin.H{
-// 		"data": result,
-// 		"msg":  "Successfully obtained",
-// 	})
-// }
-
 func (h *WordHandler) getNewWord(c *gin.Context) {
 	UserId, _ := c.Get("UserId")
 	var config models.UserConfig
@@ -534,25 +378,25 @@ func (h *WordHandler) getNewWord(c *gin.Context) {
 	DB.Preload("Word").Joins("LEFT JOIN review_progress lp ON lp.word_id = word_books_relation.word_id").
 		Where("lp.word_id IS NULL AND word_books_relation.book_id = ?", config.BookID).
 		Order("word_books_relation.id DESC").
-		Limit(config.LearnGroup).
+		Limit(20).
 		Find(&wordbooks)
 	for _, word := range wordbooks {
 		wordinfo := WordInfo{
-			ID:        word.Word.ID,
-			Words:     word.Word.Words,
-			Tone:      word.Word.Tone,
-			Rome:      word.Word.Rome,
-			Browse:    word.Word.Browse,
-			Detail:    word.Word.Detail,
-			Kana:      word.Word.Kana,
-			UpdatedAt: word.Word.UpdatedAt,
+			ID:          word.Word.ID,
+			Words:       word.Word.Words,
+			Tone:        word.Word.Tone,
+			Rome:        word.Word.Rome,
+			Browse:      word.Word.Browse,
+			Detail:      word.Word.Detail,
+			Kana:        word.Word.Kana,
+			Description: word.Word.Description,
+			UpdatedAt:   word.Word.UpdatedAt,
 		}
 		result = append(result, wordinfo)
 	}
 	c.JSON(http.StatusOK, gin.H{
 		"data":  result,
 		"total": len(result),
-		"msg":   "Successfully obtained",
 	})
 }
 
@@ -588,40 +432,6 @@ func (h *WordHandler) jcInfo(c *gin.Context) {
 	})
 }
 
-// // 新增学习记录
-//
-//	func (h *WordHandler) addLearnRecord(c *gin.Context) {
-//		var learnRecord []models.LearnRecord
-//		var Req struct {
-//			Words []struct {
-//				Error  int  ` json:"error"`
-//				WordID uint ` json:"word_id"`
-//			} `json:"words"`
-//		}
-//		if err := c.ShouldBindJSON(&Req); err != nil {
-//			c.JSON(http.StatusBadRequest, gin.H{"err": err.Error()})
-//			return
-//		}
-//		timestamp := time.Now().Unix() + 86400
-//		UserId, _ := c.Get("UserId")
-//		for _, item := range Req.Words {
-//			var reviewTime int64 = 0
-//			if item.Error != 0 {
-//				reviewTime = timestamp * 3
-//			} else {
-//				reviewTime = timestamp
-//			}
-//			learnRecord = append(learnRecord, models.LearnRecord{
-//				WordID:     item.WordID,
-//				UserID:     UserId.(uint),
-//				ReviewTime: reviewTime,
-//			})
-//		}
-//		DB.Create(&learnRecord)
-//		c.JSON(http.StatusOK, gin.H{
-//			"msg": "Record successful",
-//		})
-//	}
 func (h *WordHandler) recommendWord(c *gin.Context) {
 	recommendWords := make([]models.JapaneseDict, 0)
 	DB.Order("browse desc").Limit(10).Find(&recommendWords)

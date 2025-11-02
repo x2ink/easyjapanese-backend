@@ -167,7 +167,6 @@ func getGrammarList(c *gin.Context) {
 		ID       uint     `json:"id"`
 		Grammar  string   `json:"grammar"`
 		Level    string   `json:"level"`
-		Connect  string   `json:"connect"`
 		Meanings []string `json:"meanings" gorm:"serializer:json"`
 	}
 	page, err := strconv.Atoi(c.Query("page"))
@@ -185,14 +184,15 @@ func getGrammarList(c *gin.Context) {
 	var total int64
 	result := make([]GrammarRes, 0)
 	if val == "" {
-		db = db.Where("level = ?", level)
-		db.Limit(pageSize).Offset(pageSize * (page - 1)).Find(&result)
+		if level != "" {
+			db = db.Where("level = ?", level)
+		}
 		db.Count(&total)
+		db.Limit(pageSize).Offset(pageSize * (page - 1)).Find(&result)
 	} else {
 		db = db.Where("MATCH(grammar) AGAINST (? IN BOOLEAN MODE)", val)
 		db.Limit(pageSize).Offset(pageSize * (page - 1)).Find(&result)
 		db.Count(&total)
-
 	}
 	c.JSON(http.StatusOK, gin.H{
 		"data":  result,
@@ -213,13 +213,8 @@ func verbTrans(c *gin.Context) {
 }
 func setUserConfig(c *gin.Context) {
 	var Req struct {
-		ID          uint                  `json:"id" binding:"required"`
-		LearnGroup  int                   `json:"learn_group" binding:"required"`
-		ReviewGroup int                   `json:"review_group" binding:"required"`
-		BookID      int                   `json:"book_id" binding:"required"`
-		WriteGroup  int                   `json:"write_group"`
-		SoundGroup  int                   `json:"sound_group"`
-		CycleConfig models.MemorySettings `json:"cycle_config" gorm:"serializer:json"`
+		ID     uint `json:"id" binding:"required"`
+		BookID int  `json:"book_id" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&Req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"err": err.Error()})
