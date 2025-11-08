@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sort"
 	"strconv"
 	"time"
 
@@ -116,7 +117,17 @@ func (h *WordHandler) getReviewWord(c *gin.Context) {
 	now := time.Now()
 	startOfDay := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 	endOfDay := startOfDay.Add(24*time.Hour - time.Nanosecond)
-	DB.Preload("Word").Where("(next_review_date BETWEEN ? AND ?) and user_id=?", startOfDay, endOfDay, UserId).Limit(10).Find(&reviewProgress)
+	subQuery := DB.
+		Table("review_progress").
+		Select("word_id, MAX(next_review_date) as max_next_review_date").
+		Where("user_id = ?", UserId).
+		Group("word_id")
+	DB.Debug().
+		Preload("Word").
+		Joins("JOIN (?) AS latest ON review_progress.word_id = latest.word_id AND review_progress.next_review_date = latest.max_next_review_date", subQuery).
+		Where("review_progress.next_review_date < ?", endOfDay).
+		Limit(10).
+		Find(&reviewProgress)
 	result := make([]WordInfo, 0)
 	for _, word := range reviewProgress {
 		wordinfo := WordInfo{
@@ -129,6 +140,7 @@ func (h *WordHandler) getReviewWord(c *gin.Context) {
 			Kana:        word.Word.Kana,
 			Description: word.Word.Description,
 			UpdatedAt:   word.Word.UpdatedAt,
+			Voice:       fmt.Sprintf("https://jpx2ink.oss-cn-shanghai.aliyuncs.com/audio/dict/jc/%d/word.wav", word.WordID),
 		}
 		result = append(result, wordinfo)
 	}
@@ -154,16 +166,17 @@ func (h *WordHandler) review(c *gin.Context) {
 		updateReviewProgress(&reviewProgress, info, Req.Quality)
 		reviewProgress.WordID = Req.WordId
 		reviewProgress.UserID = UserId.(uint)
+		reviewProgress.Type = "learn"
 		DB.Create(&reviewProgress)
 	} else {
 		fmt.Print(reviewProgress.ID)
 		info := utils.Review(Req.Quality, reviewProgress.Easiness, reviewProgress.Interval, reviewProgress.Repetitions, reviewProgress.NextReviewDate)
 		updateReviewProgress(&reviewProgress, info, Req.Quality)
 		reviewProgress.ID = 0
+		reviewProgress.Type = "review"
 		DB.Create(&reviewProgress)
 	}
 	c.JSON(200, gin.H{})
-
 }
 func updateReviewProgress(rp *models.ReviewProgress, info utils.ReviewResult, quality int) {
 	rp.Easiness = info.Easiness
@@ -276,95 +289,112 @@ type BookInfo struct {
 
 func (h *WordHandler) getInfo(c *gin.Context) {
 	UserId, _ := c.Get("UserId")
-	learnRecords := make([]models.ReviewProgress, 0)
+
+	// 查询该用户的所有学习/复习记录
+	var learnRecords []models.ReviewProgress
 	DB.Order("created_at desc").Where("user_id = ?", UserId).Find(&learnRecords)
-	// 判断日期是否连续
-	day := 0
+
 	now := time.Now()
-	midnight := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
-	dayTimestamp := midnight.Unix()
-	dayGroups := make([]time.Time, 0)
-	var dayReview int64 = 0
-	var dayLearn int64 = 0
-	todayStart := time.Now().Truncate(24 * time.Hour)
-	todayEnd := todayStart.Add(24*time.Hour - 1*time.Second)
-	year, month, _ := now.Date()
-	dates := make([]string, 0)
-	for k, v := range learnRecords {
-		if v.CreatedAt.Year() == year || v.CreatedAt.Month() == month {
-			dates = slice.AppendIfAbsent(dates, v.CreatedAt.Format("01-02"))
-		}
-		if v.UpdatedAt.Before(todayEnd) && v.UpdatedAt.After(todayStart) && !v.UpdatedAt.Equal(v.CreatedAt) {
-			dayReview++
-		}
-		if v.CreatedAt.Before(todayEnd) && v.CreatedAt.After(todayStart) {
+	todayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	todayEnd := todayStart.Add(24*time.Hour - time.Second)
+
+	var (
+		dayReview int64
+		dayLearn  int64
+	)
+
+	// -------- 统计今日学习 & 复习数量，同时收集日期 --------
+	dateSet := make(map[string]bool)
+	for _, v := range learnRecords {
+		if v.Type == "learn" && v.CreatedAt.After(todayStart) && v.CreatedAt.Before(todayEnd) {
 			dayLearn++
 		}
-		if slice.Contain(dayGroups, v.CreatedAt) {
-			dayGroups = append(dayGroups, v.CreatedAt)
-			timestamp := time.Date(v.CreatedAt.Year(), v.CreatedAt.Month(), v.CreatedAt.Day(), 0, 0, 0, 0, v.CreatedAt.Location()).Unix()
-			diffDays := int((dayTimestamp - timestamp) / 86400)
-			// 判断是否连续
-			if k == 0 && diffDays == 0 {
-				day = 1
-			} else if k == 0 && diffDays == 1 {
-				day = 1
+		if v.Type == "review" && v.UpdatedAt.After(todayStart) && v.UpdatedAt.Before(todayEnd) {
+			dayReview++
+		}
+
+		// 收集所有学习日期
+		if v.Type == "learn" || v.Type == "review" {
+			dayStr := v.CreatedAt.Format("2006-01-02")
+			dateSet[dayStr] = true
+		}
+	}
+
+	// -------- 计算连续学习天数 --------
+	day := 0
+	if len(dateSet) > 0 {
+		dates := make([]time.Time, 0, len(dateSet))
+		for d := range dateSet {
+			t, _ := time.ParseInLocation("2006-01-02", d, time.Local)
+			dates = append(dates, t)
+		}
+		sort.Slice(dates, func(i, j int) bool { return dates[i].Before(dates[j]) })
+
+		today := todayStart
+		for i := len(dates) - 1; i >= 0; i-- {
+			diffDays := int(today.Sub(dates[i]).Hours() / 24)
+			if diffDays == day {
+				day++
 			} else {
-				//第一个是不是今天
-				onetimestamp := time.Date(dayGroups[0].Year(), dayGroups[0].Month(), dayGroups[0].Day(), 0, 0, 0, 0, dayGroups[0].Location()).Unix()
-				if onetimestamp == dayTimestamp {
-					if diffDays == k {
-						day++
-					} else {
-						break
-					}
-				} else {
-					if diffDays == k+1 {
-						day++
-					} else {
-						break
-					}
-				}
+				break // 不连续
 			}
 		}
 	}
+
+	// -------- 获取用户配置及单词书信息 --------
 	var userConfig models.UserConfig
 	DB.Where("user_id = ?", UserId).First(&userConfig)
+
 	var bookInfo BookInfo
 	DB.Model(models.WordBook{}).First(&bookInfo, userConfig.BookID)
-	wordids := make([]uint, 0)
-	DB.Model(models.WordBooksRelation{}).Where("book_id = ?", userConfig.BookID).Pluck("word_id", &wordids)
-	learnnum := 0
+
+	// 获取当前书的全部单词ID
+	var wordIDs []uint
+	DB.Model(models.WordBooksRelation{}).Where("book_id = ?", userConfig.BookID).Pluck("word_id", &wordIDs)
+
+	// -------- 统计学习单词数量与等待复习数量 --------
+	learnNum := 0
 	review := 0
-	learn := 0
-	endOfDay := midnight.Add(23*time.Hour + 59*time.Minute + 59*time.Second)
-	for _, v := range learnRecords {
-		if v.NextReviewDate.Unix() < endOfDay.Unix() {
-			review++
+	latestMap := make(map[uint]models.ReviewProgress)
+
+	for _, rp := range learnRecords {
+		// 取每个单词最新的复习记录
+		if latest, ok := latestMap[rp.WordID]; !ok || rp.NextReviewDate.After(latest.NextReviewDate) {
+			latestMap[rp.WordID] = rp
 		}
-		if slice.Contain(wordids, v.WordID) {
-			learnnum++
+		if slice.Contain(wordIDs, rp.WordID) {
+			learnNum++
 		}
 	}
+
+	for _, rp := range latestMap {
+		if !rp.NextReviewDate.Before(todayStart) && rp.NextReviewDate.Before(todayEnd) {
+			review++
+		}
+	}
+
+	// -------- 构造日期数据（本月内的日期） --------
+	year, month, _ := now.Date()
+	datesForChart := make([]string, 0)
+	for d := range dateSet {
+		t, _ := time.ParseInLocation("2006-01-02", d, time.Local)
+		if t.Year() == year && t.Month() == month {
+			datesForChart = append(datesForChart, t.Format("01-02"))
+		}
+	}
+
+	// -------- 返回结果 --------
 	c.JSON(http.StatusOK, gin.H{
 		"data": gin.H{
-			// 一共学习的单词
-			"learnt": len(learnRecords),
-			// 今日复习
-			"day_review": dayReview,
-			// 今日新学
-			"day_learn": dayLearn,
-			// 选择的单词书数量
-			"wordnum": len(wordids),
-			// 等待复习的单词
-			"review": review,
-			// 今日学习的单词
-			"learn": learn,
-			// 选择的单词书学习的单词数量
-			"learnnum":  learnnum,
-			"day":       day,
-			"book_info": bookInfo,
-			"dates":     dates,
+			"learnt":     len(learnRecords), // 一共学习的单词
+			"day_review": dayReview,         // 今日复习
+			"day_learn":  dayLearn,          // 今日新学
+			"wordnum":    len(wordIDs),      // 当前单词书总数
+			"review":     review,            // 等待复习数量
+			"learnnum":   learnNum,          // 当前书中学习过的数量
+			"day":        day,               // 连续学习天数
+			"book_info":  bookInfo,
+			"dates":      datesForChart, // 本月学习日期
 		},
 	})
 }
@@ -375,7 +405,7 @@ func (h *WordHandler) getNewWord(c *gin.Context) {
 	DB.First(&config, "user_id = ?", UserId)
 	wordbooks := make([]models.WordBooksRelation, 0)
 	result := make([]WordInfo, 0)
-	DB.Preload("Word").Joins("LEFT JOIN review_progress lp ON lp.word_id = word_books_relation.word_id").
+	DB.Debug().Preload("Word").Joins("LEFT JOIN review_progress lp ON lp.word_id = word_books_relation.word_id").
 		Where("lp.word_id IS NULL AND word_books_relation.book_id = ?", config.BookID).
 		Order("word_books_relation.id DESC").
 		Limit(20).
@@ -390,6 +420,7 @@ func (h *WordHandler) getNewWord(c *gin.Context) {
 			Detail:      word.Word.Detail,
 			Kana:        word.Word.Kana,
 			Description: word.Word.Description,
+			Voice:       fmt.Sprintf("https://jpx2ink.oss-cn-shanghai.aliyuncs.com/audio/dict/jc/%d/word.wav", word.WordID),
 			UpdatedAt:   word.Word.UpdatedAt,
 		}
 		result = append(result, wordinfo)
@@ -410,26 +441,39 @@ type WordInfo struct {
 	UpdatedAt   time.Time       `json:"updated_at"`
 	Browse      uint            `json:"browse"`
 	Description string          `json:"description"`
+	Voice       string          `json:"voice"`
 }
 
 func (h *WordHandler) jcInfo(c *gin.Context) {
-	var wordInfo WordInfo
+	var dict models.JapaneseDict
 	id, err := strconv.Atoi(c.Query("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"err": "The id format is incorrect"})
 		return
 	}
-	result := DB.Model(models.JapaneseDict{}).First(&wordInfo, id).Error
-	if errors.Is(result, gorm.ErrRecordNotFound) {
-		c.JSON(http.StatusNotFound, gin.H{
-			"err": "Word does not exist",
-		})
+	if err := DB.First(&dict, id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"err": "Word does not exist"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"err": err.Error()})
 		return
 	}
-	DB.Model(&models.JapaneseDict{Model: gorm.Model{ID: wordInfo.ID}}).Update("browse", wordInfo.Browse+1)
-	c.JSON(http.StatusOK, gin.H{
-		"data": wordInfo,
-	})
+	wordInfo := WordInfo{
+		ID:          dict.ID,
+		Words:       dict.Words,
+		Kana:        dict.Kana,
+		Tone:        dict.Tone,
+		Rome:        dict.Rome,
+		Detail:      dict.Detail,
+		Browse:      dict.Browse,
+		Description: dict.Description,
+		Voice:       fmt.Sprintf("https://jpx2ink.oss-cn-shanghai.aliyuncs.com/audio/dict/jc/%d/word.wav", dict.ID),
+		UpdatedAt:   dict.UpdatedAt,
+	}
+	DB.Model(&dict).Update("browse", dict.Browse+1)
+	c.JSON(http.StatusOK, gin.H{"data": wordInfo})
+
 }
 
 func (h *WordHandler) recommendWord(c *gin.Context) {

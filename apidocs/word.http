@@ -57,13 +57,19 @@ Authorization: {{token}}
 Content-Type: application/json
 
 
+### 获取今日复习的单词
+GET {{host}}/review
+Authorization: {{token}}
+Content-Type: application/json
+
+
 ### 学习&复习单词
 POST {{host}}/review
 Authorization: {{token}}
 Content-Type: application/json
 
 {
-  "word_id": 66003,
+  "word_id": 47959,
   "quality": 5
 }
 

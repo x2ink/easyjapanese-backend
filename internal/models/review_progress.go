@@ -19,6 +19,7 @@ type ReviewProgress struct {
 	Done           bool         `gorm:"column:done;default:false;comment:是否掌握该单词" json:"done,omitempty"`
 	Listen         bool         `gorm:"column:listen;default:false;comment:是否掌握该单词" json:"listen,omitempty"`
 	Write          bool         `gorm:"column:write;default:false;comment:是否掌握该单词" json:"write,omitempty"`
+	Type           string       `gorm:"column:type" json:"type,omitempty"`
 }
 
 func (ReviewProgress) TableName() string {

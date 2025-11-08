@@ -5,8 +5,9 @@ import (
 )
 
 type DictExample struct {
-	Jp string `json:"jp"`
-	Zh string `json:"zh"`
+	Jp    string `json:"jp"`
+	Zh    string `json:"zh"`
+	Voice string `json:"voice"`
 }
 type Meaning struct {
 	Zh       string        `json:"zh"`
