@@ -8,6 +8,7 @@ type DictExample struct {
 	Jp    string `json:"jp"`
 	Zh    string `json:"zh"`
 	Voice string `json:"voice"`
+	Read  []Ruby `json:"read"`
 }
 type Meaning struct {
 	Zh       string        `json:"zh"`
@@ -27,7 +28,6 @@ type JapaneseDict struct {
 	SearchText  string   `json:"search_text"`
 	Rome        string   `json:"rome"`
 	Detail      []Detail `json:"detail" gorm:"serializer:json"`
-	Meanings    string   `json:"-" gorm:"column:meanings_text"`
 	Description string   `json:"description"`
 }
 

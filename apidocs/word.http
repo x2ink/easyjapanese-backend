@@ -85,6 +85,18 @@ GET {{host}}/book/word?wordId=64209
 Authorization: {{token}}
 Content-Type: application/json
 
+
+### 获取单词的听力选项
+GET {{host}}/listen/options?wordId=64209
+Authorization: {{token}}
+Content-Type: application/json
+
+
+### 回顾今日单词
+GET {{host}}/learnt
+Authorization: {{token}}
+Content-Type: application/json
+
 # ### 新增单词书
 # POST {{host}}/book/add
 # Authorization: {{token}}

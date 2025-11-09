@@ -16,6 +16,7 @@ type ReviewProgress struct {
 	Interval       int          `gorm:"column:interval" json:"interval,omitempty"`
 	Repetitions    int          `gorm:"column:repetitions" json:"repetitions,omitempty"`
 	Word           JapaneseDict `gorm:"gorm:foreignKey:WordID;references:ID" json:"word"`
+	User           Users        `gorm:"gorm:foreignKey:UserID;references:ID" json:"user"`
 	Done           bool         `gorm:"column:done;default:false;comment:是否掌握该单词" json:"done,omitempty"`
 	Listen         bool         `gorm:"column:listen;default:false;comment:是否掌握该单词" json:"listen,omitempty"`
 	Write          bool         `gorm:"column:write;default:false;comment:是否掌握该单词" json:"write,omitempty"`

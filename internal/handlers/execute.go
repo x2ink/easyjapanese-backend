@@ -118,7 +118,12 @@ type RankingRes struct {
 
 func getRanking(c *gin.Context) {
 	res := make([]RankingRes, 0)
-	DB.Debug().Preload("User").Select("COUNT(id) as word_count", "user_id").Model(&models.LearnRecord{}).Group("user_id").Order("word_count desc").Find(&res)
+	DB.Model(&models.ReviewProgress{}).
+		Select("user_id, COUNT(DISTINCT word_id) AS word_count").
+		Group("user_id").
+		Order("word_count DESC").
+		Preload("User").Limit(20).
+		Find(&res)
 	c.JSON(http.StatusOK, gin.H{
 		"data": res,
 	})

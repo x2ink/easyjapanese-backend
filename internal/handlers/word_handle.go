@@ -7,6 +7,7 @@ import (
 	"easyjapanese/utils"
 	"errors"
 	"fmt"
+	"math/rand"
 	"net/http"
 	"sort"
 	"strconv"
@@ -34,6 +35,61 @@ func (h *WordHandler) WordRoutes(router *gin.Engine) {
 	router.GET("/read", h.getFollowRead)
 	router.GET("/recommend", h.recommendWord)
 	router.GET("/homeinfo", middleware.User(), h.getInfo)
+	router.GET("/listen/options", middleware.User(), h.getListenOptions)
+}
+
+type ListenAnwser struct {
+	Anwser   bool     `json:"anwser"`
+	WordInfo WordInfo `json:"word"`
+	Class    string   `json:"class"`
+}
+
+func (h *WordHandler) getListenOptions(c *gin.Context) {
+	wordId := c.Query("wordId")
+	var others []models.JapaneseDict
+	err := DB.Where("id >= FLOOR(RAND() * (SELECT MAX(id) FROM japanese_dict))").
+		Where("id NOT IN (?)", wordId).
+		Limit(3).
+		Find(&others).Error
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"err": err.Error()})
+		return
+	}
+	var word models.JapaneseDict
+	DB.First(&word, wordId)
+	results := make([]ListenAnwser, 0)
+	for _, v := range others {
+		results = append(results, ListenAnwser{
+			WordInfo: WordInfo{
+				ID:          v.ID,
+				Words:       v.Words,
+				Tone:        v.Tone,
+				Rome:        v.Rome,
+				Kana:        v.Kana,
+				Description: v.Description,
+				Voice:       fmt.Sprintf("https://jpx2ink.oss-cn-shanghai.aliyuncs.com/audio/dict/jc/%d/word.wav", v.ID),
+			},
+			Anwser: false,
+		})
+	}
+	results = append(results, ListenAnwser{
+		WordInfo: WordInfo{
+			ID:          word.ID,
+			Words:       word.Words,
+			Tone:        word.Tone,
+			Rome:        word.Rome,
+			Kana:        word.Kana,
+			Description: word.Description,
+			Voice:       fmt.Sprintf("https://jpx2ink.oss-cn-shanghai.aliyuncs.com/audio/dict/jc/%d/word.wav", word.ID),
+		},
+		Anwser: true,
+	})
+	rand.Shuffle(len(results), func(i, j int) {
+		results[i], results[j] = results[j], results[i]
+	})
+	c.JSON(http.StatusOK, gin.H{
+		"data": results,
+	})
 }
 
 type JapaneseDictRes struct {
@@ -79,6 +135,13 @@ func (h *WordHandler) setTodayWord(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{})
 }
+
+type TodayWords struct {
+	WordInfo
+	Write  bool `json:"write"`
+	Listen bool `json:"listen"`
+}
+
 func (h *WordHandler) getTodayWord(c *gin.Context) {
 	UserId, _ := c.Get("UserId")
 	filter := c.Query("filter")
@@ -89,23 +152,28 @@ func (h *WordHandler) getTodayWord(c *gin.Context) {
 	db := DB.Where("(created_at BETWEEN ? AND ?) and user_id=?", startOfDay, endOfDay, UserId)
 	switch filter {
 	case "write":
-		db.Where("write=?", false)
+		db.Where("`write`=?", false)
 	case "listen":
 		db.Where("listen=?", false)
 	}
 	db.Preload("Word").Limit(10).Find(&reviewProgress)
-	result := make([]WordInfo, 0)
+	result := make([]TodayWords, 0)
 	for _, word := range reviewProgress {
-		wordinfo := WordInfo{
-			ID:          word.Word.ID,
-			Words:       word.Word.Words,
-			Tone:        word.Word.Tone,
-			Rome:        word.Word.Rome,
-			Browse:      word.Word.Browse,
-			Detail:      word.Word.Detail,
-			Kana:        word.Word.Kana,
-			Description: word.Word.Description,
-			UpdatedAt:   word.Word.UpdatedAt,
+		wordinfo := TodayWords{
+			WordInfo: WordInfo{
+				ID:          word.Word.ID,
+				Words:       word.Word.Words,
+				Tone:        word.Word.Tone,
+				Rome:        word.Word.Rome,
+				Browse:      word.Word.Browse,
+				Detail:      word.Word.Detail,
+				Kana:        word.Word.Kana,
+				Description: word.Word.Description,
+				UpdatedAt:   word.Word.UpdatedAt,
+				Voice:       fmt.Sprintf("https://jpx2ink.oss-cn-shanghai.aliyuncs.com/audio/dict/jc/%d/word.wav", word.WordID),
+			},
+			Write:  word.Write,
+			Listen: word.Listen,
 		}
 		result = append(result, wordinfo)
 	}
@@ -116,7 +184,10 @@ func (h *WordHandler) getReviewWord(c *gin.Context) {
 	reviewProgress := make([]models.ReviewProgress, 0)
 	now := time.Now()
 	startOfDay := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
-	endOfDay := startOfDay.Add(24*time.Hour - time.Nanosecond)
+	startOfDay = startOfDay.Truncate(time.Second)
+	endOfDay := startOfDay.Add(24*time.Hour - time.Second)
+	startOfDayStr := startOfDay.Format("2006-01-02 15:04:05")
+	endOfDayStr := endOfDay.Format("2006-01-02 15:04:05")
 	subQuery := DB.
 		Table("review_progress").
 		Select("word_id, MAX(next_review_date) as max_next_review_date").
@@ -125,7 +196,7 @@ func (h *WordHandler) getReviewWord(c *gin.Context) {
 	DB.Debug().
 		Preload("Word").
 		Joins("JOIN (?) AS latest ON review_progress.word_id = latest.word_id AND review_progress.next_review_date = latest.max_next_review_date", subQuery).
-		Where("review_progress.next_review_date < ?", endOfDay).
+		Where("review_progress.next_review_date BETWEEN ? AND ?", startOfDayStr, endOfDayStr).
 		Limit(10).
 		Find(&reviewProgress)
 	result := make([]WordInfo, 0)
