@@ -26,6 +26,11 @@ func (h *WordHandler) WordRoutes(router *gin.Engine) {
 		jc.GET("/list", h.jcList)
 		jc.GET("/info", h.jcInfo)
 	}
+	edit := router.Group("/edit").Use(middleware.User())
+	{
+		edit.POST("/submit", h.submitEdit)
+		edit.GET("/history", h.getEditHistory)
+	}
 	router.POST("/review", middleware.User(), h.review)
 	router.GET("/learn", middleware.User(), h.getNewWord)
 	router.GET("/review", middleware.User(), h.getReviewWord)
@@ -36,6 +41,37 @@ func (h *WordHandler) WordRoutes(router *gin.Engine) {
 	router.GET("/recommend", h.recommendWord)
 	router.GET("/homeinfo", middleware.User(), h.getInfo)
 	router.GET("/listen/options", middleware.User(), h.getListenOptions)
+}
+func (h WordHandler) submitEdit(c *gin.Context) {
+	UserId, _ := c.Get("UserId")
+	var Req struct {
+		WordID      uint                 `json:"word_id"`
+		Words       string               `json:"words"`
+		Kana        string               `json:"kana"`
+		Tone        string               `json:"tone"`
+		Description string               `json:"description"`
+		Meanings    []models.EditMeaning `json:"meanings"`
+		Examples    []models.EditExample `json:"examples"`
+	}
+	if err := c.ShouldBindJSON(&Req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"err": err.Error()})
+		return
+	}
+	DB.Debug().Delete(&models.WordEdit{}, "user_id = ? AND word_id = ?", UserId, Req.WordID)
+	editData := models.WordEdit{}
+	editData.Words = Req.Words
+	editData.WordID = Req.WordID
+	editData.Kana = Req.Kana
+	editData.Tone = Req.Tone
+	editData.Description = Req.Description
+	editData.Meanings = Req.Meanings
+	editData.Examples = Req.Examples
+	editData.UserID = UserId.(uint)
+	DB.Create(&editData)
+	c.JSON(http.StatusOK, gin.H{})
+}
+func (h WordHandler) getEditHistory(c *gin.Context) {
+
 }
 
 type ListenAnwser struct {
