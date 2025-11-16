@@ -57,7 +57,7 @@ func (h WordHandler) submitEdit(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"err": err.Error()})
 		return
 	}
-	DB.Debug().Delete(&models.WordEdit{}, "user_id = ? AND word_id = ?", UserId, Req.WordID)
+	DB.Delete(&models.WordEdit{}, "user_id = ? AND word_id = ?", UserId, Req.WordID)
 	editData := models.WordEdit{}
 	editData.Words = Req.Words
 	editData.WordID = Req.WordID
@@ -70,8 +70,34 @@ func (h WordHandler) submitEdit(c *gin.Context) {
 	DB.Create(&editData)
 	c.JSON(http.StatusOK, gin.H{})
 }
-func (h WordHandler) getEditHistory(c *gin.Context) {
 
+type WordEditHistory struct {
+	ID        uint      `json:"id"`
+	UserID    uint      `json:"user_id"`
+	Status    int8      `gorm:"type:tinyint;default:0" json:"status"`
+	Comment   string    `gorm:"type:text" json:"comment"`
+	CreatedAt time.Time `json:"created_at"`
+	User      userInfo  `gorm:"foreignKey:UserID" json:"user"`
+}
+
+func (h WordHandler) getEditHistory(c *gin.Context) {
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, err := strconv.Atoi(c.DefaultQuery("page_size", "10"))
+	if err != nil || page < 1 {
+		page = 1
+	}
+	if err != nil || pageSize < 1 || pageSize > 100 {
+		pageSize = 10
+	}
+	editHistorys := make([]WordEditHistory, 0)
+	var total int64 = 0
+	db := DB.Model(&models.WordEdit{}).Where("word_id = ?", c.Query("word_id"))
+	db.Count(&total)
+	db.Preload("User").Limit(pageSize).Offset((page - 1) * pageSize).Order("id desc").Find(&editHistorys)
+	c.JSON(http.StatusOK, gin.H{
+		"data":  editHistorys,
+		"total": total,
+	})
 }
 
 type ListenAnwser struct {
