@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strconv"
 	"time"
+	"unicode/utf8"
 
 	"github.com/duke-git/lancet/v2/slice"
 	"github.com/gin-gonic/gin"
@@ -207,6 +208,8 @@ type TodayWords struct {
 func (h *WordHandler) getTodayWord(c *gin.Context) {
 	UserId, _ := c.Get("UserId")
 	filter := c.Query("filter")
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "10"))
 	reviewProgress := make([]models.ReviewProgress, 0)
 	now := time.Now()
 	startOfDay := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
@@ -214,11 +217,13 @@ func (h *WordHandler) getTodayWord(c *gin.Context) {
 	db := DB.Where("(created_at BETWEEN ? AND ?) and user_id=?", startOfDay, endOfDay, UserId)
 	switch filter {
 	case "write":
-		db.Where("`write`=?", false)
+		db = db.Where("`write`=?", false)
 	case "listen":
-		db.Where("listen=?", false)
+		db = db.Where("listen=?", false)
 	}
-	db.Preload("Word").Limit(10).Find(&reviewProgress)
+	var total int64 = 0
+	db.Preload("Word").Limit(pageSize).Offset((page - 1) * pageSize).Find(&reviewProgress)
+	DB.Model(&reviewProgress).Where("(created_at BETWEEN ? AND ?) and user_id=?", startOfDay, endOfDay, UserId).Count(&total)
 	result := make([]TodayWords, 0)
 	for _, word := range reviewProgress {
 		wordinfo := TodayWords{
@@ -239,7 +244,7 @@ func (h *WordHandler) getTodayWord(c *gin.Context) {
 		}
 		result = append(result, wordinfo)
 	}
-	c.JSON(200, gin.H{"data": result})
+	c.JSON(200, gin.H{"data": result, "total": total})
 }
 func (h *WordHandler) getReviewWord(c *gin.Context) {
 	UserId, _ := c.Get("UserId")
@@ -320,7 +325,6 @@ func updateReviewProgress(rp *models.ReviewProgress, info utils.ReviewResult, qu
 }
 
 func (h *WordHandler) jcList(c *gin.Context) {
-
 	val := c.Query("val")
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, err := strconv.Atoi(c.DefaultQuery("page_size", "10"))
@@ -334,9 +338,13 @@ func (h *WordHandler) jcList(c *gin.Context) {
 	var total int64 = 0
 	db := DB.Model(&models.JapaneseDict{}).Select("words", "tone", "rome", "kana", "id", "description")
 	if val != "" {
-		db = db.Where("MATCH(search_text) AGAINST(? IN NATURAL LANGUAGE MODE)", val)
+		if utf8.RuneCountInString(val) > 1 {
+			db = db.Where("MATCH(search_text) AGAINST(? IN NATURAL LANGUAGE MODE)", val)
+		} else {
+			db = db.Where("search_text LIKE ?", "%"+val+"%")
+		}
 	}
-	db.Count(&total)
+	db.Debug().Count(&total)
 	db.Limit(pageSize).Offset((page - 1) * pageSize).Order("LENGTH(kana) asc").Find(&wordList)
 	var result []JapaneseDictRes
 	for _, v := range wordList {
@@ -541,7 +549,7 @@ func (h *WordHandler) getNewWord(c *gin.Context) {
 	DB.Debug().Preload("Word").Joins("LEFT JOIN review_progress lp ON lp.word_id = word_books_relation.word_id").
 		Where("lp.word_id IS NULL AND word_books_relation.book_id = ?", config.BookID).
 		Order("word_books_relation.id DESC").
-		Limit(20).
+		Limit(15).
 		Find(&wordbooks)
 	for _, word := range wordbooks {
 		wordinfo := WordInfo{
