@@ -97,6 +97,17 @@ GET {{host}}/learnt
 Authorization: {{token}}
 Content-Type: application/json
 
+
+### 句子分析
+POST {{host}}/tools/break-sentence
+Authorization: {{token}}
+Content-Type: application/json
+
+{
+  "sentence": "自己紹介いたします。"
+}
+
+
 # ### 新增单词书
 # POST {{host}}/book/add
 # Authorization: {{token}}

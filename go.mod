@@ -10,7 +10,7 @@ require (
 	github.com/ikawaha/kagome-dict/ipa v1.2.0
 	github.com/ikawaha/kagome/v2 v2.10.0
 	github.com/redis/go-redis/v9 v9.7.0
-	golang.org/x/text v0.21.0
+	golang.org/x/text v0.23.0
 	gopkg.in/gomail.v2 v2.0.0-20160411212932-81ebce5c23df
 	gorm.io/driver/mysql v1.5.7
 	gorm.io/gorm v1.25.12
@@ -32,7 +32,8 @@ require (
 	github.com/go-playground/validator/v10 v10.23.0 // indirect
 	github.com/go-sql-driver/mysql v1.8.1 // indirect
 	github.com/goccy/go-json v0.10.3 // indirect
-	github.com/ikawaha/kagome-dict v1.1.0 // indirect
+	github.com/ikawaha/kagome-dict v1.1.6 // indirect
+	github.com/ikawaha/kagome-dict/uni v1.2.5 // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/jinzhu/now v1.1.5 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect

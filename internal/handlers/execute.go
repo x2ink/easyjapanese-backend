@@ -10,6 +10,9 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+
+	"github.com/ikawaha/kagome-dict/uni"
+	"github.com/ikawaha/kagome/v2/tokenizer"
 	"gorm.io/gorm"
 )
 
@@ -39,6 +42,51 @@ func Execute(router *gin.Engine) {
 	router.GET("/ranking", getRanking)
 	// router.GET("/dailytalk/:page/:size", getDailyTalk)
 	router.GET("/sentence", getSentence)
+	router.POST("/tools/break-sentence", sentenceBreakdown)
+}
+
+type SentenceTokenData struct {
+	Surface       string   `json:"surface"`
+	Reading       string   `json:"reading"`
+	BaseForm      string   `json:"base_form"`
+	Pos           []string `json:"pos"`
+	Pronunciation string   `json:"pronunciation"`
+	Features      []string `json:"features"`
+}
+
+// 词句拆解
+func sentenceBreakdown(c *gin.Context) {
+	var Req struct {
+		Sentence string `json:"sentence" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&Req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"err": err.Error()})
+		return
+	}
+	t, err := tokenizer.New(uni.Dict(), tokenizer.OmitBosEos())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, err.Error())
+		return
+	}
+	tokens := t.Tokenize(Req.Sentence)
+	result := make([]SentenceTokenData, 0)
+	for _, v := range tokens {
+		if v.Class == tokenizer.DUMMY {
+			continue
+		}
+		r := tokenizer.NewTokenData(v)
+		result = append(result, SentenceTokenData{
+			Surface:       r.Surface,
+			Reading:       r.Reading,
+			BaseForm:      r.BaseForm,
+			Pos:           r.POS,
+			Pronunciation: r.Pronunciation,
+			Features:      r.Features,
+		})
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"data": result,
+	})
 }
 
 type userInfo struct {
