@@ -40,14 +40,14 @@ func Execute(router *gin.Engine) {
 	router.GET("/grammar/list", getGrammarList)
 	router.GET("/grammar/info", getGrammarInfo)
 	router.GET("/ranking", getRanking)
-	// router.GET("/dailytalk/:page/:size", getDailyTalk)
+	router.GET("/dailytalk", getDailyTalk)
 	router.GET("/sentence", getSentence)
 	router.POST("/tools/break-sentence", sentenceBreakdown)
+	router.GET("/culture", getCultureList)
 }
 
 type SentenceTokenData struct {
 	Surface       string   `json:"surface"`
-	Reading       string   `json:"reading"`
 	BaseForm      string   `json:"base_form"`
 	Pos           []string `json:"pos"`
 	Pronunciation string   `json:"pronunciation"`
@@ -77,7 +77,6 @@ func sentenceBreakdown(c *gin.Context) {
 		r := tokenizer.NewTokenData(v)
 		result = append(result, SentenceTokenData{
 			Surface:       r.Surface,
-			Reading:       r.Reading,
 			BaseForm:      r.BaseForm,
 			Pos:           r.POS,
 			Pronunciation: r.Pronunciation,
@@ -136,27 +135,36 @@ func getSentence(c *gin.Context) {
 	})
 }
 
-// func getDailyTalk(c *gin.Context) {
-// 	page, err := strconv.Atoi(c.Param("page"))
-// 	if err != nil {
-// 		c.JSON(http.StatusBadRequest, gin.H{"err": "The page format is incorrect"})
-// 		return
-// 	}
-// 	size, err := strconv.Atoi(c.Param("size"))
-// 	if err != nil {
-// 		c.JSON(http.StatusBadRequest, gin.H{"err": "The size format is incorrect"})
-// 		return
-// 	}
-// 	var res []models.DailyTalk
-// 	var total int64 = 0
-// 	DB.Limit(size).Offset(size * (page - 1)).Find(&res)
-// 	DB.Model(&models.DailyTalk{}).Count(&total)
-// 	c.JSON(http.StatusOK, gin.H{
-// 		"msg":   "Successfully obtained",
-// 		"data":  res,
-// 		"total": total,
-// 	})
-// }
+func getDailyTalk(c *gin.Context) {
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, err := strconv.Atoi(c.DefaultQuery("page_size", "10"))
+	if err != nil || page < 1 {
+		page = 1
+	}
+	var res []models.DailyTalk
+	var total int64 = 0
+	DB.Limit(pageSize).Offset(pageSize * (page - 1)).Find(&res)
+	DB.Model(&models.DailyTalk{}).Count(&total)
+	c.JSON(http.StatusOK, gin.H{
+		"data":  res,
+		"total": total,
+	})
+}
+func getCultureList(c *gin.Context) {
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, err := strconv.Atoi(c.DefaultQuery("page_size", "10"))
+	if err != nil || page < 1 {
+		page = 1
+	}
+	var res []models.Culture
+	var total int64 = 0
+	DB.Limit(pageSize).Offset(pageSize * (page - 1)).Find(&res)
+	DB.Model(&models.Culture{}).Count(&total)
+	c.JSON(http.StatusOK, gin.H{
+		"data":  res,
+		"total": total,
+	})
+}
 
 type RankingRes struct {
 	User      userInfo `json:"user"`

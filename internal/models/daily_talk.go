@@ -1,10 +1,10 @@
 package models
 
 type DailyTalk struct {
-	ID uint   `json:"id"`
-	Ja string `json:"ja"`
-	Ch string `json:"ch"`
-	// Read []Read `json:"read" gorm:"serializer:json"`
+	ID   uint   `json:"id"`
+	Jp   string `json:"jp"`
+	Zh   string `json:"zh"`
+	Ruby []Ruby `json:"ruby" gorm:"serializer:json"`
 }
 
 func (DailyTalk) TableName() string {
