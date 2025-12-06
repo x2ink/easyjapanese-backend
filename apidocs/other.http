@@ -10,6 +10,50 @@ Content-Type: application/json
 
 
 ### 文化常识
-
 GET {{host}}/culture?page=1&page_size=10
 Content-Type: application/json
+
+
+### 新增笔记
+POST {{host}}/notes/add
+Authorization: {{token}}
+Content-Type: application/json
+
+{
+  "target_id": 3,
+  "target_type": "word",
+  "content": "ssss"
+}
+
+
+### 删除笔记
+POST {{host}}/notes/delete
+Authorization: {{token}}
+Content-Type: application/json
+
+{
+  "id": 4
+}
+
+
+### 查询笔记列表
+GET {{host}}/notes/list?page=1&page_size=10
+Authorization: {{token}}
+Content-Type: application/json
+
+
+### 查询笔记详情
+GET {{host}}/notes/info?id=5
+Authorization: {{token}}
+Content-Type: application/json
+
+
+### 更新笔记
+POST {{host}}/notes/update
+Authorization: {{token}}
+Content-Type: application/json
+
+{
+  "id": 5,
+  "content": "111"
+}

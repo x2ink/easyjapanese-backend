@@ -107,6 +107,34 @@ Content-Type: application/json
   "sentence": "自己紹介いたします。"
 }
 
+
 ### 获取每日会话
 GET {{host}}/dailytalk?page=1&page_size=10
 Content-Type: application/json
+
+
+### 编辑单词
+POST {{host}}/edit/submit
+Authorization: {{token}}
+Content-Type: application/json
+
+{
+  "id": 30033,
+  "words": [
+    "被除数"
+  ],
+  "kana": "ひじょすう",
+  "tone": "②",
+  "rome": "hijosuu",
+  "detail": [
+    {
+      "type": "名词",
+      "meanings": [
+        {
+          "zh": "除法中被除的数"
+        }
+      ]
+    }
+  ],
+  "description": "被除数"
+}

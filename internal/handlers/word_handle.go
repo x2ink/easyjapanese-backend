@@ -46,29 +46,30 @@ func (h *WordHandler) WordRoutes(router *gin.Engine) {
 func (h WordHandler) submitEdit(c *gin.Context) {
 	UserId, _ := c.Get("UserId")
 	var Req struct {
-		WordID      uint                 `json:"word_id"`
-		Words       string               `json:"words"`
-		Kana        string               `json:"kana"`
-		Tone        string               `json:"tone"`
-		Description string               `json:"description"`
-		Meanings    []models.EditMeaning `json:"meanings"`
-		Examples    []models.EditExample `json:"examples"`
+		ID          uint            `json:"id"`
+		Words       []string        `json:"words"`
+		Kana        string          `json:"kana"`
+		Tone        string          `json:"tone"`
+		Rome        string          `json:"rome"`
+		Detail      []models.Detail `json:"detail"`
+		Description string          `json:"description"`
 	}
 	if err := c.ShouldBindJSON(&Req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"err": err.Error()})
 		return
 	}
-	DB.Delete(&models.WordEdit{}, "user_id = ? AND word_id = ?", UserId, Req.WordID)
-	editData := models.WordEdit{}
-	editData.Words = Req.Words
-	editData.WordID = Req.WordID
-	editData.Kana = Req.Kana
-	editData.Tone = Req.Tone
-	editData.Description = Req.Description
-	editData.Meanings = Req.Meanings
-	editData.Examples = Req.Examples
-	editData.UserID = UserId.(uint)
-	DB.Create(&editData)
+	DB.Delete(&models.WordEdit{}, "user_id = ? AND word_id = ?", UserId, Req.ID)
+	edit := models.WordEdit{
+		WordID:      Req.ID,
+		Words:       Req.Words,
+		Kana:        Req.Kana,
+		Tone:        Req.Tone,
+		Rome:        Req.Rome,
+		Detail:      Req.Detail,
+		Description: Req.Description,
+		UserID:      UserId.(uint),
+	}
+	DB.Create(&edit)
 	c.JSON(http.StatusOK, gin.H{})
 }
 
@@ -92,7 +93,7 @@ func (h WordHandler) getEditHistory(c *gin.Context) {
 	}
 	editHistorys := make([]WordEditHistory, 0)
 	var total int64 = 0
-	db := DB.Model(&models.WordEdit{}).Where("word_id = ?", c.Query("word_id"))
+	db := DB.Model(&models.WordEdit{}).Where("word_id = ? and status = 1", c.Query("word_id"))
 	db.Count(&total)
 	db.Preload("User").Limit(pageSize).Offset((page - 1) * pageSize).Order("id desc").Find(&editHistorys)
 	c.JSON(http.StatusOK, gin.H{

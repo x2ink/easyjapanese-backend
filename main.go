@@ -24,7 +24,6 @@ func main() {
 	router := gin.Default()
 	router.Static("/file", "./file")
 	router.Static("/html", "./html")
-	router.Static("/md", "./md")
 	router.OPTIONS("/*any", func(c *gin.Context) {
 		c.Header("Access-Control-Allow-Origin", "*")
 		c.Header("Access-Control-Allow-Methods", "GET, POST")

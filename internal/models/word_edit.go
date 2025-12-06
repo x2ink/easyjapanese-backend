@@ -1,27 +1,22 @@
 package models
 
-import "gorm.io/gorm"
+import (
+	"gorm.io/gorm"
+)
 
-type EditMeaning struct {
-	Type     string `json:"type"`
-	Meanings string `json:"meanings"`
-}
-type EditExample struct {
-	Jp string `json:"jp"`
-	Zh string `json:"zh"`
-}
 type WordEdit struct {
 	gorm.Model
-	UserID      uint          `json:"user_id"`
-	Status      int8          `gorm:"type:tinyint;default:0" json:"status"`
-	Comment     string        `gorm:"type:text" json:"comment"`
-	Words       string        `gorm:"type:varchar(255)" json:"words"`
-	Kana        string        `gorm:"type:varchar(255)" json:"kana"`
-	Tone        string        `gorm:"type:varchar(255)" json:"tone"`
-	Description string        `gorm:"type:varchar(255)" json:"description"`
-	Meanings    []EditMeaning `json:"meanings" gorm:"serializer:json"`
-	Examples    []EditExample `json:"examples" gorm:"serializer:json"`
-	WordID      uint          `json:"word_id"`
+	Words       []string `json:"words" gorm:"serializer:json"`
+	Kana        string   `json:"kana"`
+	Tone        string   `json:"tone"`
+	Rome        string   `json:"rome"`
+	Detail      []Detail `json:"detail" gorm:"serializer:json"`
+	Description string   `json:"description"`
+	UserID      uint     `gorm:"type:bigint" json:"user_id"`
+	WordID      uint     `gorm:"type:int" json:"word_id"`
+	Status      uint     `gorm:"column:status;default:0" json:"status"`
+	Comment     string   `gorm:"type:text" json:"comment"`
+	User        Users    `gorm:"foreignKey:UserID;references:ID" json:"user"`
 }
 
 func (WordEdit) TableName() string {

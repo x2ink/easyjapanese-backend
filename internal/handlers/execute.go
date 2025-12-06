@@ -31,8 +31,8 @@ func Execute(router *gin.Engine) {
 	Filehandler.FileRoutes(router)
 	Bookhandler := &BookHandler{}
 	Bookhandler.BookRoutes(router)
-	// Noteshandler := &NotesHandler{}
-	// Noteshandler.NotesRoutes(router)
+	Noteshandler := &NotesHandler{}
+	Noteshandler.NotesRoutes(router)
 	router.GET("/config", middleware.User(), getUserConfig)
 	router.POST("/config", middleware.User(), setUserConfig)
 	router.POST("/feedback", middleware.User(), feedback)
