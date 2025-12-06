@@ -52,6 +52,10 @@ func (h *NotesHandler) queryOrigin(c *gin.Context) {
 		var culture models.Culture
 		DB.First(&culture, targetID)
 		result = culture.Title
+	case "grammar":
+		var grammar models.Grammar
+		DB.First(&grammar, targetID)
+		result = grammar.Grammar
 	}
 	c.JSON(http.StatusOK, gin.H{"data": result})
 }
