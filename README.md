@@ -22,7 +22,7 @@ App；H5网页；微信小程序
 > - 开发工具：hbuilder，pycharm，vscode，datagrip等；
 ### 执行命令
 
-GOOS=linux GOARCH=amd64 go build -o backend
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o app
 
 ### 执行linux命令
 

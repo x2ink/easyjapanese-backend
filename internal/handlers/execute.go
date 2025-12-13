@@ -1,11 +1,13 @@
 package handlers
 
 import (
+	"easyjapanese/config"
 	. "easyjapanese/db"
 	"easyjapanese/internal/middleware"
 	"easyjapanese/internal/models"
 	"easyjapanese/utils"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -145,8 +147,18 @@ func getDailyTalk(c *gin.Context) {
 	var total int64 = 0
 	DB.Limit(pageSize).Offset(pageSize * (page - 1)).Find(&res)
 	DB.Model(&models.DailyTalk{}).Count(&total)
+	var result []models.DailyTalk
+	for _, v := range res {
+		result = append(result, models.DailyTalk{
+			Voice: fmt.Sprintf("%s/audio/talk/%d.wav", config.AliOssAddress, v.ID),
+			ID:    v.ID,
+			Jp:    v.Jp,
+			Zh:    v.Zh,
+			Ruby:  v.Ruby,
+		})
+	}
 	c.JSON(http.StatusOK, gin.H{
-		"data":  res,
+		"data":  result,
 		"total": total,
 	})
 }

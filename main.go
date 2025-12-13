@@ -22,7 +22,6 @@ func main() {
 	}
 	db.InitMysql()
 	router := gin.Default()
-	router.Static("/file", "./file")
 	router.Static("/html", "./html")
 	router.OPTIONS("/*any", func(c *gin.Context) {
 		c.Header("Access-Control-Allow-Origin", "*")
@@ -32,8 +31,8 @@ func main() {
 	})
 
 	router.Use(cors.New(cors.Config{
-		AllowOrigins: []string{"http://192.168.1.3:8080", "http://192.168.1.3:8080", "http://localhost:5173", "http://localhost:3000"},
-		MaxAge:       12 * time.Hour,
+		AllowAllOrigins: true,
+		MaxAge:          12 * time.Hour,
 	}))
 	handlers.Execute(router)
 	if err := router.Run("0.0.0.0:8080"); err != nil {

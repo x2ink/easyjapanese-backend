@@ -27,6 +27,7 @@ func (h *BookHandler) BookRoutes(router *gin.Engine) {
 	v2.POST("/add", h.addWord)
 	v2.GET("/list", h.getWordList)
 	v2.POST("/delete", h.delWords)
+	v2.POST("/done", h.setDone)
 }
 func (h *BookHandler) getContainBook(c *gin.Context) {
 	wordId := c.Query("wordId")
@@ -36,6 +37,34 @@ func (h *BookHandler) getContainBook(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"data": ids,
 	})
+}
+func (h *BookHandler) setDone(c *gin.Context) {
+	var Req struct {
+		WordIds []uint `json:"word_ids" binding:"required"`
+		Type    string `json:"type"`
+	}
+	UserId, _ := c.Get("UserId")
+	if err := c.ShouldBindJSON(&Req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"err": err.Error()})
+		return
+	}
+	DB.Where("user_id = ? AND word_id IN ?", UserId, Req.WordIds).
+		Delete(&models.ReviewProgress{})
+	if Req.Type == "mark" {
+		var words []models.ReviewProgress
+		for _, v := range Req.WordIds {
+			words = append(words, models.ReviewProgress{
+				UserID:         UserId.(uint),
+				WordID:         v,
+				Quality:        5,
+				Done:           true,
+				NextReviewDate: time.Date(9999, 12, 31, 23, 59, 59, 0, time.UTC),
+			})
+		}
+		DB.Create(&words)
+	}
+	c.JSON(http.StatusOK, gin.H{})
+
 }
 func (h *BookHandler) release(c *gin.Context) {
 	var Req struct {

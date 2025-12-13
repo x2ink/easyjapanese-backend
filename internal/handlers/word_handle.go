@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"easyjapanese/config"
 	. "easyjapanese/db"
 	"easyjapanese/internal/middleware"
 	"easyjapanese/internal/models"
@@ -131,7 +132,7 @@ func (h *WordHandler) getListenOptions(c *gin.Context) {
 				Rome:        v.Rome,
 				Kana:        v.Kana,
 				Description: v.Description,
-				Voice:       fmt.Sprintf("https://jpx2ink.oss-cn-shanghai.aliyuncs.com/audio/dict/jc/%d/word.wav", v.ID),
+				Voice:       fmt.Sprintf("%s/audio/dict/jc/%d/word.wav", config.AliOssAddress, v.ID),
 			},
 			Anwser: false,
 		})
@@ -144,7 +145,7 @@ func (h *WordHandler) getListenOptions(c *gin.Context) {
 			Rome:        word.Rome,
 			Kana:        word.Kana,
 			Description: word.Description,
-			Voice:       fmt.Sprintf("https://jpx2ink.oss-cn-shanghai.aliyuncs.com/audio/dict/jc/%d/word.wav", word.ID),
+			Voice:       fmt.Sprintf("%s/audio/dict/jc/%d/word.wav", config.AliOssAddress, word.ID),
 		},
 		Anwser: true,
 	})
@@ -215,7 +216,7 @@ func (h *WordHandler) getTodayWord(c *gin.Context) {
 	now := time.Now()
 	startOfDay := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 	endOfDay := startOfDay.Add(24*time.Hour - time.Nanosecond)
-	db := DB.Where("(created_at BETWEEN ? AND ?) and user_id=?", startOfDay, endOfDay, UserId)
+	db := DB.Where("(created_at BETWEEN ? AND ?) and user_id=? and done=0", startOfDay, endOfDay, UserId)
 	switch filter {
 	case "write":
 		db = db.Where("`write`=?", false)
@@ -238,7 +239,7 @@ func (h *WordHandler) getTodayWord(c *gin.Context) {
 				Kana:        word.Word.Kana,
 				Description: word.Word.Description,
 				UpdatedAt:   word.Word.UpdatedAt,
-				Voice:       fmt.Sprintf("https://jpx2ink.oss-cn-shanghai.aliyuncs.com/audio/dict/jc/%d/word.wav", word.WordID),
+				Voice:       fmt.Sprintf("%s/audio/dict/jc/%d/word.wav", config.AliOssAddress, word.WordID),
 			},
 			Write:  word.Write,
 			Listen: word.Listen,
@@ -259,10 +260,9 @@ func (h *WordHandler) getReviewWord(c *gin.Context) {
 	subQuery := DB.
 		Table("review_progress").
 		Select("word_id, MAX(next_review_date) as max_next_review_date").
-		Where("user_id = ?", UserId).
+		Where("user_id = ? and done = 0", UserId).
 		Group("word_id")
-	DB.Debug().
-		Preload("Word").
+	DB.Preload("Word").
 		Joins("JOIN (?) AS latest ON review_progress.word_id = latest.word_id AND review_progress.next_review_date = latest.max_next_review_date", subQuery).
 		Where("review_progress.next_review_date BETWEEN ? AND ?", startOfDayStr, endOfDayStr).
 		Limit(10).
@@ -279,7 +279,7 @@ func (h *WordHandler) getReviewWord(c *gin.Context) {
 			Kana:        word.Word.Kana,
 			Description: word.Word.Description,
 			UpdatedAt:   word.Word.UpdatedAt,
-			Voice:       fmt.Sprintf("https://jpx2ink.oss-cn-shanghai.aliyuncs.com/audio/dict/jc/%d/word.wav", word.WordID),
+			Voice:       fmt.Sprintf("%s/audio/dict/jc/%d/word.wav", config.AliOssAddress, word.WordID),
 		}
 		result = append(result, wordinfo)
 	}
@@ -308,7 +308,6 @@ func (h *WordHandler) review(c *gin.Context) {
 		reviewProgress.Type = "learn"
 		DB.Create(&reviewProgress)
 	} else {
-		fmt.Print(reviewProgress.ID)
 		info := utils.Review(Req.Quality, reviewProgress.Easiness, reviewProgress.Interval, reviewProgress.Repetitions, reviewProgress.NextReviewDate)
 		updateReviewProgress(&reviewProgress, info, Req.Quality)
 		reviewProgress.ID = 0
@@ -543,12 +542,12 @@ func (h *WordHandler) getInfo(c *gin.Context) {
 
 func (h *WordHandler) getNewWord(c *gin.Context) {
 	UserId, _ := c.Get("UserId")
-	var config models.UserConfig
-	DB.First(&config, "user_id = ?", UserId)
+	var userConfig models.UserConfig
+	DB.First(&userConfig, "user_id = ?", UserId)
 	wordbooks := make([]models.WordBooksRelation, 0)
 	result := make([]WordInfo, 0)
-	DB.Debug().Preload("Word").Joins("LEFT JOIN review_progress lp ON lp.word_id = word_books_relation.word_id").
-		Where("lp.word_id IS NULL AND word_books_relation.book_id = ?", config.BookID).
+	DB.Preload("Word").Joins("LEFT JOIN review_progress lp ON lp.word_id = word_books_relation.word_id").
+		Where("lp.word_id IS NULL AND word_books_relation.book_id = ?", userConfig.BookID).
 		Order("word_books_relation.id DESC").
 		Limit(15).
 		Find(&wordbooks)
@@ -562,7 +561,7 @@ func (h *WordHandler) getNewWord(c *gin.Context) {
 			Detail:      word.Word.Detail,
 			Kana:        word.Word.Kana,
 			Description: word.Word.Description,
-			Voice:       fmt.Sprintf("https://jpx2ink.oss-cn-shanghai.aliyuncs.com/audio/dict/jc/%d/word.wav", word.WordID),
+			Voice:       fmt.Sprintf("%s/audio/dict/jc/%d/word.wav", config.AliOssAddress, word.WordID),
 			UpdatedAt:   word.Word.UpdatedAt,
 		}
 		result = append(result, wordinfo)
@@ -610,7 +609,7 @@ func (h *WordHandler) jcInfo(c *gin.Context) {
 		Detail:      dict.Detail,
 		Browse:      dict.Browse,
 		Description: dict.Description,
-		Voice:       fmt.Sprintf("https://jpx2ink.oss-cn-shanghai.aliyuncs.com/audio/dict/jc/%d/word.wav", dict.ID),
+		Voice:       fmt.Sprintf("%s/audio/dict/jc/%d/word.wav", config.AliOssAddress, dict.ID),
 		UpdatedAt:   dict.UpdatedAt,
 	}
 	DB.Model(&dict).Update("browse", dict.Browse+1)
